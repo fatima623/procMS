@@ -2,19 +2,37 @@ import Link from 'next/link';
 import { Role } from '@prisma/client';
 import { requireRoles } from '@/interfaces/ui/auth';
 import { AdminFirmService } from '@/application/admin/AdminFirmService';
+import { prisma } from '@/infrastructure/db/prisma';
 import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
 import { Pager } from '@/interfaces/ui/components/Pager';
+import { KpiCard } from '@/interfaces/ui/components/KpiCard';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Firms • Admin' };
 
 const service = new AdminFirmService();
 
+const ICON = {
+  firm:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21V12h6v9"/></svg>,
+  check: <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4L19 6"/></svg>,
+  warn:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3L2 20h20z"/><path d="M12 10v5M12 18h.01"/></svg>,
+  ban:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5 5l14 14"/></svg>,
+};
+
 export default async function FirmsPage({ searchParams }: { searchParams: { q?: string; page?: string } }) {
   const ctx = await requireRoles([Role.ADMIN]);
   const page = Math.max(1, Number(searchParams.page ?? '1') || 1);
-  const result = await service.list(ctx, { search: searchParams.q, page });
+
+  const [result, total, active, blacklisted, inactive, noNtn] = await Promise.all([
+    service.list(ctx, { search: searchParams.q, page }),
+    prisma.firm.count(),
+    prisma.firm.count({ where: { isActive: true, isBlacklisted: false } }),
+    prisma.firm.count({ where: { isBlacklisted: true } }),
+    prisma.firm.count({ where: { isActive: false, isBlacklisted: false } }),
+    prisma.firm.count({ where: { ntn: null, isBlacklisted: false } }),
+  ]);
+
   return (
     <>
       <div className="row" style={{ marginBottom: 16 }}>
@@ -26,6 +44,16 @@ export default async function FirmsPage({ searchParams }: { searchParams: { q?: 
         </form>
         <Link href="/admin/firms/new" className="btn btn-primary">+ New firm</Link>
       </div>
+
+      {/* Portfolio summary */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14, marginBottom: 18 }}>
+        <KpiCard accent="indigo"  icon={ICON.firm}  label="All firms"           value={total}       sub="On the roster" />
+        <KpiCard accent="emerald" icon={ICON.check} label="Active"              value={active}      sub="Ready for tender" />
+        <KpiCard accent="amber"   icon={ICON.warn}  label="Needs verification"  value={noNtn}       sub="Missing NTN" />
+        <KpiCard accent="violet"  icon={ICON.firm}  label="Inactive"            value={inactive}    sub="Deactivated by admin" />
+        <KpiCard accent="coral"   icon={ICON.ban}   label="Blacklisted"         value={blacklisted} sub="Excluded from tenders" />
+      </section>
+
       {result.items.length === 0 ? (
         <Empty>No firms match.</Empty>
       ) : (

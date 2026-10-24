@@ -113,6 +113,70 @@ export async function listVisibleIndents(
   };
 }
 
+/**
+ * Aggregate counts + total value for the same filter the list page uses.
+ * Keeps the SQL cheap: one groupBy for counts, one aggregate for value.
+ */
+export interface IndentListSummary {
+  readonly total: number;
+  readonly active: number;
+  readonly awaitingApproval: number;
+  readonly draft: number;
+  readonly closed: number;
+  readonly totalValueMinor: string;
+}
+
+const TERMINAL_STATUSES: IndentStatus[] = ['CLOSED', 'CANCELLED', 'INDENT_REJECTED', 'BUDGET_REJECTED'] as unknown as IndentStatus[];
+const APPROVAL_STATUSES: IndentStatus[] = ['INDENT_APPROVAL', 'IT_APPROVAL', 'CST_APPROVAL', 'CPO_APPROVAL'] as unknown as IndentStatus[];
+
+export async function summarizeVisibleIndents(
+  ctx: AuthContext,
+  opts: ListVisibleIndentsOpts = {},
+): Promise<IndentListSummary> {
+  const where: Prisma.IndentWhereInput = {};
+  const isPrivileged = ctx.roles.some((r) =>
+    ([Role.ADMIN, Role.AD, Role.DD, Role.DP_N, Role.DGDP, Role.SECY_DP, Role.SUPTD, Role.CPO, Role.COORD_STAFF, Role.BUDGET_STAFF, Role.CR_STAFF, Role.INSPECTORATE] as Role[]).includes(r),
+  );
+  if (!isPrivileged) where.indenterId = ctx.userId;
+  if (opts.statuses && opts.statuses.length > 0) where.status = { in: [...opts.statuses] };
+  else if (opts.status) where.status = opts.status;
+  if (opts.sectionId) where.sectionId = opts.sectionId;
+  if (opts.assignedAdpId) where.assignedAdpId = opts.assignedAdpId;
+  if (opts.fiscalYearId) where.fiscalYearId = opts.fiscalYearId;
+  if (opts.budgetHeadId) where.budgetHeadId = opts.budgetHeadId;
+  if (opts.priority) where.priority = opts.priority as Prisma.IndentWhereInput['priority'];
+  if (opts.minValue || opts.maxValue) {
+    where.estimatedValue = {
+      ...(opts.minValue ? { gte: opts.minValue } : {}),
+      ...(opts.maxValue ? { lte: opts.maxValue } : {}),
+    };
+  }
+  if (opts.search) {
+    where.OR = [
+      { indentNumber: { contains: opts.search } },
+      { controlNumber: { contains: opts.search } },
+      { subject: { contains: opts.search } },
+    ];
+  }
+
+  const [grouped, agg] = await Promise.all([
+    prisma.indent.groupBy({ by: ['status'], where, _count: { _all: true } }),
+    prisma.indent.aggregate({ where, _sum: { estimatedValue: true } }),
+  ]);
+
+  let total = 0, active = 0, awaitingApproval = 0, draft = 0, closed = 0;
+  for (const g of grouped) {
+    const n = g._count._all;
+    total += n;
+    if (g.status === 'DRAFT') draft += n;
+    if (TERMINAL_STATUSES.includes(g.status)) closed += n; else active += n;
+    if (APPROVAL_STATUSES.includes(g.status)) awaitingApproval += n;
+  }
+  const sum = agg._sum.estimatedValue;
+  const totalValueMinor = sum ? decimalToMinor(sum as unknown as string).toString() : '0';
+  return { total, active, awaitingApproval, draft, closed, totalValueMinor };
+}
+
 export interface IndentDetailView {
   readonly id: string;
   readonly indentNumber: string;

@@ -1,11 +1,19 @@
 import Link from 'next/link';
 import { Role, IndentStatus, IndentPriority, SectionKind } from '@prisma/client';
 import { requireSessionCtx } from '@/interfaces/ui/auth';
-import { listVisibleIndents, loadFilterReferenceData } from '@/interfaces/ui/views/IndentViews';
+import { listVisibleIndents, summarizeVisibleIndents, loadFilterReferenceData } from '@/interfaces/ui/views/IndentViews';
 import { StatusPill, toneForIndentStatus } from '@/interfaces/ui/components/StatusPill';
-import { MoneyLabel } from '@/interfaces/ui/components/Money';
+import { MoneyLabel, MoneyCompact } from '@/interfaces/ui/components/Money';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { Empty } from '@/interfaces/ui/components/Empty';
+import { KpiCard } from '@/interfaces/ui/components/KpiCard';
+
+const ICON = {
+  stack:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>,
+  pulse:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>,
+  clock:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
+  wallet: <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h3"/><path d="M3 10h18"/></svg>,
+};
 
 export const metadata = { title: 'Indents • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -33,19 +41,21 @@ export default async function IndentsPage({ searchParams }: {
     ? statuses
     : legacyStatus ? [legacyStatus] : [];
 
-  const [result, refs] = await Promise.all([
-    listVisibleIndents(ctx, {
-      page,
-      search: searchParams.q,
-      ...(effectiveStatuses.length ? { statuses: effectiveStatuses } : {}),
-      ...(searchParams.section ? { sectionId: searchParams.section } : {}),
-      ...(searchParams.adp ? { assignedAdpId: searchParams.adp } : {}),
-      ...(searchParams.fy ? { fiscalYearId: searchParams.fy } : {}),
-      ...(searchParams.head ? { budgetHeadId: searchParams.head } : {}),
-      ...(searchParams.priority && VALID_PRIORITIES.has(searchParams.priority) ? { priority: searchParams.priority } : {}),
-      ...(searchParams.minValue ? { minValue: searchParams.minValue } : {}),
-      ...(searchParams.maxValue ? { maxValue: searchParams.maxValue } : {}),
-    }),
+  const listOpts = {
+    page,
+    search: searchParams.q,
+    ...(effectiveStatuses.length ? { statuses: effectiveStatuses } : {}),
+    ...(searchParams.section ? { sectionId: searchParams.section } : {}),
+    ...(searchParams.adp ? { assignedAdpId: searchParams.adp } : {}),
+    ...(searchParams.fy ? { fiscalYearId: searchParams.fy } : {}),
+    ...(searchParams.head ? { budgetHeadId: searchParams.head } : {}),
+    ...(searchParams.priority && VALID_PRIORITIES.has(searchParams.priority) ? { priority: searchParams.priority } : {}),
+    ...(searchParams.minValue ? { minValue: searchParams.minValue } : {}),
+    ...(searchParams.maxValue ? { maxValue: searchParams.maxValue } : {}),
+  };
+  const [result, summary, refs] = await Promise.all([
+    listVisibleIndents(ctx, listOpts),
+    summarizeVisibleIndents(ctx, listOpts),
     loadFilterReferenceData(),
   ]);
 
@@ -71,6 +81,14 @@ export default async function IndentsPage({ searchParams }: {
         >Export CSV ↓</a>
         {canCreate && <Link href="/indents/new" className="btn btn-primary">+ New indent</Link>}
       </div>
+
+      {/* Summary KPI strip — reflects the current filter */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14, marginBottom: 18 }}>
+        <KpiCard accent="indigo"  icon={ICON.stack}  label={hasAnyFilter ? 'Matching' : 'Total indents'} value={summary.total} sub={`${summary.draft} draft · ${summary.closed} closed`} />
+        <KpiCard accent="sky"     icon={ICON.pulse}  label="Active" value={summary.active} sub="In the pipeline" />
+        <KpiCard accent="amber"   icon={ICON.clock}  label="Awaiting approval" value={summary.awaitingApproval} sub="Indent / IT / CST / CPO" />
+        <KpiCard accent="emerald" icon={ICON.wallet} label="Total value" value={<MoneyCompact amountMinor={summary.totalValueMinor} currency="PKR" precision={2} />} sub="Sum of estimated values" />
+      </section>
 
       {/* Filter panel */}
       <details className="card" open={hasAnyFilter} style={{ padding: 0 }}>
