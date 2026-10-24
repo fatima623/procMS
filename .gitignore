@@ -1,0 +1,54 @@
+# dependencies
+node_modules
+.pnp
+.pnp.*
+
+# testing
+coverage
+*.lcov
+
+# next.js
+.next
+out
+build
+dist
+
+# production
+*.tsbuildinfo
+next-env.d.ts
+
+# env
+.env
+.env.local
+.env.*.local
+
+# prisma
+prisma/*.db
+prisma/*.db-journal
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# editor
+.vscode
+.idea
+.DS_Store
+
+# misc
+.turbo
+
+# local attachment store (keep the directory, ignore contents)
+storage/attachments/*
+!storage/attachments/.gitkeep
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+
+# SBOM / license outputs
+/sbom/

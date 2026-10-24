@@ -1,0 +1,768 @@
+// =============================================================================
+// Procurement Management System — Prisma schema (MySQL)
+//
+// Models the DP(Navy) procurement workflow:
+//
+//   Indenter  →  CR Section  →  Budget Section  →  COORD Section
+//             →  Concerned ADP (vet + control number)
+//             →  SUPTD  →  AD → DD → DP(N) → DGDP → Secy DP      [Chain #1 — indent approval]
+//             →  Concerned ADP (prepare IT Issue Proforma)
+//             →  AD → DD → DP(N)                                 [Chain #2 — IT approval]
+//             →  Concerned Section dispatches IT to Firms
+//             →  Firms submit Technical Offers
+//             →  Inspectorate TSR  (queries ↔ firms, firms accepted/rejected)
+//             →  Opening of Commercial Offers (technically accepted firms)
+//             →  Preparation of CST
+//             →  AD → DD  (and AD → DD → DP(N) → DGDP → Secy DP if single quote)   [Chain #3 — CST approval]
+//             →  Purchase Requisition faxed to winning firm
+//
+// Design notes:
+//   - PKs are string ULIDs generated in the domain layer (sortable, URL-safe,
+//     opaque; avoids leaking row counts).
+//   - Monetary values are Decimal(20,4) — never Float. Currency is stored
+//     alongside amounts.
+//   - Row-level optimistic concurrency uses `version`.
+//   - State machines are enforced in the aggregate; enums here are the storage
+//     surface only.
+//   - All timestamps are UTC. The UI layer converts to the viewer's zone.
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["metrics", "relationJoins"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Identity & organisation
+// -----------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  INDENTER
+  CR_STAFF
+  BUDGET_STAFF
+  COORD_STAFF
+  ADP_STAFF
+  SUPTD
+  AD
+  DD
+  DP_N
+  DGDP
+  SECY_DP
+  CPO
+  INSPECTORATE
+  FIRM_REP
+}
+
+enum SectionKind {
+  INDENTER
+  CR
+  BUDGET
+  COORD
+  ADP
+  SUPTD
+  DP_OFFICE
+  INSPECTORATE
+  OTHER
+}
+
+model User {
+  id            String   @id @db.VarChar(26)
+  email         String   @unique @db.VarChar(254)
+  passwordHash  String   @db.VarChar(100)
+  displayName   String   @db.VarChar(120)
+  rank          String?  @db.VarChar(60)
+  isActive      Boolean  @default(true)
+  firmId        String?  @db.VarChar(26) // only populated for FIRM_REP users
+  totpSecret    String?  @db.VarChar(64)   // base32 TOTP shared secret (RFC 6238)
+  totpEnabledAt DateTime? @db.DateTime(6)
+  createdAt     DateTime @default(now()) @db.DateTime(6)
+  updatedAt     DateTime @updatedAt @db.DateTime(6)
+  version       Int      @default(0)
+
+  roles         UserRole[]
+  memberships   SectionMember[]
+  firm          Firm?       @relation(fields: [firmId], references: [id])
+
+  submittedIndents    Indent[]           @relation("IndenterToIndent")
+  decidedSteps        ApprovalStep[]     @relation("DecidedBy")
+  raisedObservations  Observation[]      @relation("RaisedBy")
+  resolvedObservations Observation[]     @relation("ResolvedBy")
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  authoredComments    Comment[]          @relation("CommentAuthor")
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([firmId])
+}
+
+model PasswordResetToken {
+  id        String   @id @db.VarChar(26)
+  userId    String   @db.VarChar(26)
+  tokenHash String   @db.VarChar(64)
+  expiresAt DateTime @db.DateTime(6)
+  usedAt    DateTime? @db.DateTime(6)
+  createdAt DateTime @default(now()) @db.DateTime(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model UserRole {
+  userId String @db.VarChar(26)
+  role   Role
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, role])
+}
+
+model Section {
+  id         String      @id @db.VarChar(26)
+  code       String      @unique @db.VarChar(40)       // e.g. "ADP-1", "COORD", "SUPTD"
+  name       String      @db.VarChar(160)
+  kind       SectionKind
+  parentId   String?     @db.VarChar(26)
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now()) @db.DateTime(6)
+  updatedAt  DateTime    @updatedAt @db.DateTime(6)
+
+  parent     Section?        @relation("SectionTree", fields: [parentId], references: [id])
+  children   Section[]       @relation("SectionTree")
+  members    SectionMember[]
+  indents    Indent[]        @relation("OwningSection")
+  assignedAdp Indent[]       @relation("AssignedAdp")
+
+  @@index([kind])
+  @@index([parentId])
+}
+
+model SectionMember {
+  userId    String @db.VarChar(26)
+  sectionId String @db.VarChar(26)
+  isHead    Boolean @default(false)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section   Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, sectionId])
+  @@index([sectionId])
+}
+
+// -----------------------------------------------------------------------------
+// Reference data
+// -----------------------------------------------------------------------------
+
+model FiscalYear {
+  id        String   @id @db.VarChar(26)
+  label     String   @unique @db.VarChar(20)  // "2026-27"
+  startsOn  DateTime @db.Date
+  endsOn    DateTime @db.Date
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now()) @db.DateTime(6)
+
+  budgetAllocations BudgetAllocation[]
+  indents           Indent[]
+}
+
+model BudgetHead {
+  id          String   @id @db.VarChar(26)
+  code        String   @unique @db.VarChar(40)
+  description String   @db.VarChar(255)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.DateTime(6)
+
+  allocations BudgetAllocation[]
+  indents     Indent[]
+}
+
+model BudgetAllocation {
+  id           String      @id @db.VarChar(26)
+  fiscalYearId String      @db.VarChar(26)
+  budgetHeadId String      @db.VarChar(26)
+  sectionId    String?     @db.VarChar(26)
+  allocated    Decimal     @db.Decimal(20, 4)
+  reserved     Decimal     @default(0) @db.Decimal(20, 4)
+  spent        Decimal     @default(0) @db.Decimal(20, 4)
+  currency     String      @default("PKR") @db.VarChar(3)
+  version      Int         @default(0)
+  createdAt    DateTime    @default(now()) @db.DateTime(6)
+  updatedAt    DateTime    @updatedAt @db.DateTime(6)
+
+  fiscalYear   FiscalYear  @relation(fields: [fiscalYearId], references: [id])
+  budgetHead   BudgetHead  @relation(fields: [budgetHeadId], references: [id])
+
+  @@unique([fiscalYearId, budgetHeadId, sectionId])
+  @@index([budgetHeadId])
+}
+
+model Firm {
+  id            String   @id @db.VarChar(26)
+  code          String   @unique @db.VarChar(40)
+  name          String   @db.VarChar(255)
+  ntn           String?  @db.VarChar(40)
+  address       String?  @db.VarChar(500)
+  city          String?  @db.VarChar(120)
+  country       String?  @db.VarChar(120)
+  email         String?  @db.VarChar(254)
+  phone         String?  @db.VarChar(60)
+  isBlacklisted Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.DateTime(6)
+  updatedAt     DateTime @updatedAt @db.DateTime(6)
+
+  users              User[]
+  itInvites          ITFirmInvite[]
+  technicalOffers    TechnicalOffer[]
+  commercialOffers   CommercialOffer[]
+  tsrQueries         TSRQuery[]
+  purchaseRequisitions PurchaseRequisition[]
+}
+
+// -----------------------------------------------------------------------------
+// Indent (procurement request)
+// -----------------------------------------------------------------------------
+
+enum IndentType {
+  NORMAL
+  PROPRIETY       // propriety indent — needs CPO approval before chain
+}
+
+enum IndentPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum IndentStatus {
+  DRAFT
+  SUBMITTED               // indenter has submitted; waiting for CR
+  CR_RECEIVED             // CR Section received; waiting to forward
+  BUDGET_CHECK            // Budget Section verifying availability
+  BUDGET_REJECTED
+  COORD_VETTING           // COORD Section vetting
+  ADP_VETTING             // Concerned ADP checking/vetting
+  ADP_OBSERVED            // ADP raised observations
+  SUPTD_VETTING
+  INDENT_APPROVAL         // Chain #1 running
+  INDENT_REJECTED
+  CPO_APPROVAL            // propriety indent waiting on CPO
+  IT_PREPARATION          // Concerned ADP preparing IT Issue Proforma
+  IT_APPROVAL             // Chain #2 running
+  IT_DISPATCHED           // IT docs sent to firms
+  TECH_OFFERS_OPEN        // firms submitting technical offers
+  TSR_IN_PROGRESS         // Inspectorate preparing TSR
+  COMMERCIAL_OPEN         // Commercial offers being opened
+  CST_PREPARATION
+  CST_APPROVAL            // Chain #3 running
+  PR_ISSUED
+  CLOSED
+  CANCELLED
+}
+
+model Indent {
+  id             String        @id @db.VarChar(26)
+  indentNumber   String        @unique @db.VarChar(40)
+  controlNumber  String?       @unique @db.VarChar(40)
+  subject        String        @db.VarChar(500)
+  justification  String?       @db.Text
+  type           IndentType    @default(NORMAL)
+  priority       IndentPriority @default(NORMAL)
+  status         IndentStatus  @default(DRAFT)
+
+  estimatedValue Decimal       @db.Decimal(20, 4)
+  currency       String        @default("PKR") @db.VarChar(3)
+
+  indenterId     String        @db.VarChar(26)
+  sectionId      String        @db.VarChar(26)        // owning section (indenter's)
+  assignedAdpId  String?       @db.VarChar(26)        // Concerned ADP section
+  fiscalYearId   String        @db.VarChar(26)
+  budgetHeadId   String        @db.VarChar(26)
+
+  submittedAt    DateTime?     @db.DateTime(6)
+  closedAt       DateTime?     @db.DateTime(6)
+  cancelledAt    DateTime?     @db.DateTime(6)
+  cancelledReason String?      @db.VarChar(500)
+
+  createdAt      DateTime      @default(now()) @db.DateTime(6)
+  updatedAt      DateTime      @updatedAt @db.DateTime(6)
+  version        Int           @default(0)
+
+  indenter       User          @relation("IndenterToIndent", fields: [indenterId], references: [id])
+  section        Section       @relation("OwningSection", fields: [sectionId], references: [id])
+  assignedAdp    Section?      @relation("AssignedAdp", fields: [assignedAdpId], references: [id])
+  fiscalYear     FiscalYear    @relation(fields: [fiscalYearId], references: [id])
+  budgetHead     BudgetHead    @relation(fields: [budgetHeadId], references: [id])
+
+  items          IndentItem[]
+  itPerforma     ITPerforma?
+  observations   Observation[]
+  attachments    Attachment[]  @relation("IndentAttachments")
+  statusHistory  IndentStatusHistory[]
+  comments       Comment[]
+
+  @@index([status])
+  @@index([sectionId])
+  @@index([assignedAdpId])
+  @@index([fiscalYearId, budgetHeadId])
+}
+
+model IndentItem {
+  id                 String  @id @db.VarChar(26)
+  indentId           String  @db.VarChar(26)
+  lineNo             Int
+  itemCode           String? @db.VarChar(80)
+  description        String  @db.VarChar(1000)
+  specifications     Json?
+  quantity           Decimal @db.Decimal(20, 4)
+  uom                String  @db.VarChar(20)
+  estimatedUnitPrice Decimal @db.Decimal(20, 4)
+  currency           String  @default("PKR") @db.VarChar(3)
+
+  indent             Indent  @relation(fields: [indentId], references: [id], onDelete: Cascade)
+
+  @@unique([indentId, lineNo])
+  @@index([indentId])
+}
+
+model IndentStatusHistory {
+  id         String       @id @db.VarChar(26)
+  indentId   String       @db.VarChar(26)
+  fromStatus IndentStatus
+  toStatus   IndentStatus
+  actorUserId String      @db.VarChar(26)
+  reason     String?      @db.VarChar(500)
+  occurredAt DateTime     @default(now()) @db.DateTime(6)
+
+  indent     Indent       @relation(fields: [indentId], references: [id], onDelete: Cascade)
+
+  @@index([indentId, occurredAt])
+}
+
+// -----------------------------------------------------------------------------
+// Approval chains (reusable across Indent / IT Proforma / CST)
+// -----------------------------------------------------------------------------
+
+enum ApprovalSubject {
+  INDENT
+  IT_PROFORMA
+  CST
+}
+
+enum ApprovalChainStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApprovalStepStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  RETURNED            // step returned the file for rework
+  SKIPPED
+}
+
+model ApprovalChain {
+  id            String              @id @db.VarChar(26)
+  subject       ApprovalSubject
+  subjectId     String              @db.VarChar(26)
+  status        ApprovalChainStatus @default(PENDING)
+  currentIndex  Int                 @default(0)
+  createdAt     DateTime            @default(now()) @db.DateTime(6)
+  updatedAt     DateTime            @updatedAt @db.DateTime(6)
+  completedAt   DateTime?           @db.DateTime(6)
+  version       Int                 @default(0)
+
+  steps         ApprovalStep[]
+
+  @@unique([subject, subjectId])
+  @@index([status])
+}
+
+model ApprovalStep {
+  id              String             @id @db.VarChar(26)
+  chainId         String             @db.VarChar(26)
+  stepIndex       Int
+  role            Role
+  assignedUserId  String?            @db.VarChar(26)
+  status          ApprovalStepStatus @default(PENDING)
+  decidedByUserId String?            @db.VarChar(26)
+  decidedAt       DateTime?          @db.DateTime(6)
+  comments        String?            @db.Text
+
+  chain           ApprovalChain      @relation(fields: [chainId], references: [id], onDelete: Cascade)
+  decidedBy       User?              @relation("DecidedBy", fields: [decidedByUserId], references: [id])
+
+  @@unique([chainId, stepIndex])
+  @@index([status])
+  @@index([assignedUserId])
+}
+
+// -----------------------------------------------------------------------------
+// Observations (queries raised during vetting)
+// -----------------------------------------------------------------------------
+
+enum ObservationStatus {
+  OPEN
+  RESOLVED
+  WITHDRAWN
+}
+
+model Observation {
+  id                String            @id @db.VarChar(26)
+  indentId          String            @db.VarChar(26)
+  raisedByUserId    String            @db.VarChar(26)
+  raisedToUserId    String?           @db.VarChar(26)
+  note              String            @db.Text
+  status            ObservationStatus @default(OPEN)
+  resolution        String?           @db.Text
+  resolvedByUserId  String?           @db.VarChar(26)
+  resolvedAt        DateTime?         @db.DateTime(6)
+  createdAt         DateTime          @default(now()) @db.DateTime(6)
+
+  indent            Indent            @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  raisedBy          User              @relation("RaisedBy", fields: [raisedByUserId], references: [id])
+  resolvedBy        User?             @relation("ResolvedBy", fields: [resolvedByUserId], references: [id])
+
+  @@index([indentId, status])
+}
+
+// -----------------------------------------------------------------------------
+// IT (Invitation to Tender) Issue Proforma
+// -----------------------------------------------------------------------------
+
+enum ITStatus {
+  DRAFT
+  IN_APPROVAL
+  APPROVED
+  DISPATCHED
+  CLOSED
+  CANCELLED
+}
+
+model ITPerforma {
+  id            String   @id @db.VarChar(26)
+  indentId      String   @unique @db.VarChar(26)
+  reference     String   @unique @db.VarChar(60)
+  checklist     Json?
+  status        ITStatus @default(DRAFT)
+  dispatchedAt  DateTime? @db.DateTime(6)
+  closingAt     DateTime? @db.DateTime(6)
+  preparedByUserId String @db.VarChar(26)
+  version       Int      @default(0)
+  createdAt     DateTime @default(now()) @db.DateTime(6)
+  updatedAt     DateTime @updatedAt @db.DateTime(6)
+
+  indent        Indent   @relation(fields: [indentId], references: [id])
+
+  firms         ITFirmInvite[]
+  technicalOffers TechnicalOffer[]
+  commercialOffers CommercialOffer[]
+  tsr           TechnicalScrutinyReport?
+  cst           CST?
+
+  @@index([status])
+}
+
+model ITFirmInvite {
+  itPerformaId String   @db.VarChar(26)
+  firmId       String   @db.VarChar(26)
+  invitedAt    DateTime @default(now()) @db.DateTime(6)
+
+  itPerforma   ITPerforma @relation(fields: [itPerformaId], references: [id], onDelete: Cascade)
+  firm         Firm       @relation(fields: [firmId], references: [id])
+
+  @@id([itPerformaId, firmId])
+}
+
+// -----------------------------------------------------------------------------
+// Technical phase
+// -----------------------------------------------------------------------------
+
+enum OfferStatus {
+  RECEIVED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+model TechnicalOffer {
+  id             String        @id @db.VarChar(26)
+  itPerformaId   String        @db.VarChar(26)
+  firmId         String        @db.VarChar(26)
+  submittedAt    DateTime      @default(now()) @db.DateTime(6)
+  documentKey    String?       @db.VarChar(500) // object-storage key
+  status         OfferStatus   @default(RECEIVED)
+  remarks        String?       @db.Text
+  version        Int           @default(0)
+
+  itPerforma     ITPerforma    @relation(fields: [itPerformaId], references: [id], onDelete: Cascade)
+  firm           Firm          @relation(fields: [firmId], references: [id])
+  tsrEvaluations TSREvaluation[]
+
+  @@unique([itPerformaId, firmId])
+  @@index([status])
+}
+
+enum TSRStatus {
+  DRAFT
+  SUBMITTED
+  QUERIES_RAISED
+  COMPLETED
+}
+
+model TechnicalScrutinyReport {
+  id              String     @id @db.VarChar(26)
+  itPerformaId    String     @unique @db.VarChar(26)
+  inspectorateUserId String  @db.VarChar(26)
+  status          TSRStatus  @default(DRAFT)
+  submittedAt     DateTime?  @db.DateTime(6)
+  completedAt     DateTime?  @db.DateTime(6)
+  summary         String?    @db.Text
+
+  itPerforma      ITPerforma @relation(fields: [itPerformaId], references: [id], onDelete: Cascade)
+  evaluations     TSREvaluation[]
+  queries         TSRQuery[]
+}
+
+enum TSRVerdict {
+  ACCEPTED
+  REJECTED
+  NEEDS_QUERY
+}
+
+model TSREvaluation {
+  id               String        @id @db.VarChar(26)
+  tsrId            String        @db.VarChar(26)
+  technicalOfferId String        @db.VarChar(26)
+  verdict          TSRVerdict
+  remarks          String?       @db.Text
+  evaluatedAt      DateTime      @default(now()) @db.DateTime(6)
+
+  tsr              TechnicalScrutinyReport @relation(fields: [tsrId], references: [id], onDelete: Cascade)
+  technicalOffer   TechnicalOffer          @relation(fields: [technicalOfferId], references: [id])
+
+  @@unique([tsrId, technicalOfferId])
+}
+
+enum TSRQueryStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+model TSRQuery {
+  id          String         @id @db.VarChar(26)
+  tsrId       String         @db.VarChar(26)
+  firmId      String         @db.VarChar(26)
+  question    String         @db.Text
+  response    String?        @db.Text
+  status      TSRQueryStatus @default(OPEN)
+  askedAt     DateTime       @default(now()) @db.DateTime(6)
+  answeredAt  DateTime?      @db.DateTime(6)
+
+  tsr         TechnicalScrutinyReport @relation(fields: [tsrId], references: [id], onDelete: Cascade)
+  firm        Firm                    @relation(fields: [firmId], references: [id])
+
+  @@index([status])
+}
+
+// -----------------------------------------------------------------------------
+// Commercial phase + CST
+// -----------------------------------------------------------------------------
+
+model CommercialOffer {
+  id            String       @id @db.VarChar(26)
+  itPerformaId  String       @db.VarChar(26)
+  firmId        String       @db.VarChar(26)
+  openedAt      DateTime     @default(now()) @db.DateTime(6)
+  totalPrice    Decimal      @db.Decimal(20, 4)
+  currency      String       @default("PKR") @db.VarChar(3)
+  deliveryWeeks Int?
+  status        OfferStatus  @default(RECEIVED)
+  documentKey   String?      @db.VarChar(500)
+  version       Int          @default(0)
+
+  itPerforma    ITPerforma   @relation(fields: [itPerformaId], references: [id], onDelete: Cascade)
+  firm          Firm         @relation(fields: [firmId], references: [id])
+  cstLines      CSTLine[]
+
+  @@unique([itPerformaId, firmId])
+  @@index([status])
+}
+
+enum CSTStatus {
+  DRAFT
+  IN_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+model CST {
+  id             String    @id @db.VarChar(26)
+  itPerformaId   String    @unique @db.VarChar(26)
+  preparedByUserId String  @db.VarChar(26)
+  status         CSTStatus @default(DRAFT)
+  singleQuote    Boolean   @default(false)
+  approvalPerformaKey String? @db.VarChar(500)
+  approvedAt     DateTime? @db.DateTime(6)
+  version        Int       @default(0)
+  createdAt      DateTime  @default(now()) @db.DateTime(6)
+  updatedAt      DateTime  @updatedAt @db.DateTime(6)
+
+  itPerforma     ITPerforma @relation(fields: [itPerformaId], references: [id])
+  lines          CSTLine[]
+  purchaseRequisition PurchaseRequisition?
+}
+
+model CSTLine {
+  id                  String  @id @db.VarChar(26)
+  cstId               String  @db.VarChar(26)
+  commercialOfferId   String  @db.VarChar(26)
+  rank                Int
+  recommendedForAward Boolean @default(false)
+  justification       String? @db.Text
+
+  cst                 CST             @relation(fields: [cstId], references: [id], onDelete: Cascade)
+  commercialOffer     CommercialOffer @relation(fields: [commercialOfferId], references: [id])
+
+  @@unique([cstId, commercialOfferId])
+  @@index([cstId, rank])
+}
+
+// -----------------------------------------------------------------------------
+// Purchase Requisition — final award to the firm
+// -----------------------------------------------------------------------------
+
+enum PRStatus {
+  DRAFT
+  SENT
+  ACKNOWLEDGED
+  CLOSED
+}
+
+model PurchaseRequisition {
+  id         String   @id @db.VarChar(26)
+  cstId      String   @unique @db.VarChar(26)
+  firmId     String   @db.VarChar(26)
+  prNumber   String   @unique @db.VarChar(60)
+  amount     Decimal  @db.Decimal(20, 4)
+  currency   String   @default("PKR") @db.VarChar(3)
+  faxedAt    DateTime? @db.DateTime(6)
+  status     PRStatus @default(DRAFT)
+  createdAt  DateTime @default(now()) @db.DateTime(6)
+  updatedAt  DateTime @updatedAt @db.DateTime(6)
+
+  cst        CST  @relation(fields: [cstId], references: [id])
+  firm       Firm @relation(fields: [firmId], references: [id])
+}
+
+// -----------------------------------------------------------------------------
+// Attachments + Audit log (cross-cutting)
+// -----------------------------------------------------------------------------
+
+enum AttachmentSubject {
+  INDENT
+  IT_PROFORMA
+  TECH_OFFER
+  COMMERCIAL_OFFER
+  TSR
+  CST
+  PR
+  OBSERVATION
+}
+
+model Attachment {
+  id            String            @id @db.VarChar(26)
+  subject       AttachmentSubject
+  subjectId     String            @db.VarChar(26)
+  originalName  String            @db.VarChar(255)
+  storageKey    String            @db.VarChar(500)   // S3-like object key
+  mimeType      String            @db.VarChar(120)
+  sizeBytes     BigInt
+  checksumSha256 String?          @db.VarChar(64)
+  uploadedByUserId String         @db.VarChar(26)
+  uploadedAt    DateTime          @default(now()) @db.DateTime(6)
+
+  indent        Indent?           @relation("IndentAttachments", fields: [subjectId], references: [id], map: "Attachment_Indent_fk")
+
+  @@index([subject, subjectId])
+}
+
+// -----------------------------------------------------------------------------
+// In-app notifications
+// -----------------------------------------------------------------------------
+
+model Notification {
+  id         String    @id @db.VarChar(26)
+  userId     String    @db.VarChar(26)
+  type       String    @db.VarChar(60)   // e.g. "approval.waiting", "pr.issued"
+  title      String    @db.VarChar(200)
+  body       String?   @db.Text
+  href       String?   @db.VarChar(500)  // in-app link to the relevant screen
+  readAt     DateTime? @db.DateTime(6)
+  createdAt  DateTime  @default(now()) @db.DateTime(6)
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+// -----------------------------------------------------------------------------
+// Comments / activity feed on an indent (free-form conversation; separate
+// from Observations which gate the workflow)
+// -----------------------------------------------------------------------------
+
+model Comment {
+  id        String    @id @db.VarChar(26)
+  indentId  String    @db.VarChar(26)
+  authorId  String    @db.VarChar(26)
+  body      String    @db.Text
+  parentId  String?   @db.VarChar(26)
+  createdAt DateTime  @default(now()) @db.DateTime(6)
+  deletedAt DateTime? @db.DateTime(6)
+
+  indent    Indent    @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  author    User      @relation("CommentAuthor", fields: [authorId], references: [id])
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+
+  @@index([indentId, createdAt])
+  @@index([parentId])
+}
+
+model DigestRecipient {
+  id        String   @id @db.VarChar(26)
+  email     String   @unique @db.VarChar(254)
+  label     String?  @db.VarChar(120)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.DateTime(6)
+
+  @@index([isActive])
+}
+
+model AuditLog {
+  id          String   @id @db.VarChar(26)
+  actorUserId String?  @db.VarChar(26)
+  action      String   @db.VarChar(80)        // e.g. "indent.submit", "approval.decide"
+  subjectType String   @db.VarChar(40)
+  subjectId   String   @db.VarChar(26)
+  metadata    Json?
+  ipAddress   String?  @db.VarChar(64)
+  userAgent   String?  @db.VarChar(255)
+  occurredAt  DateTime @default(now()) @db.DateTime(6)
+
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([subjectType, subjectId, occurredAt])
+  @@index([actorUserId, occurredAt])
+}

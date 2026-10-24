@@ -1,0 +1,46 @@
+name: Security — weekly audit
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'   # Mondays, 07:00 UTC
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit
+      - name: Full npm audit (fails on moderate+)
+        run: npm audit --audit-level=moderate
+
+  license-check:
+    name: Weekly license policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --omit=dev --prefer-offline --no-audit
+      - name: Generate license inventory
+        run: npx -y license-checker-rseidelsohn@4.3.0 --production --csv --out licenses.csv
+      - name: Fail on copyleft / source-available licenses
+        run: |
+          if grep -EqI '(GPL|AGPL|LGPL|SSPL|BUSL)' licenses.csv; then
+            echo "⚠ Copyleft / source-available licenses detected in production deps:"
+            grep -EI '(GPL|AGPL|LGPL|SSPL|BUSL)' licenses.csv
+            exit 1
+          fi
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-license-report
+          path: licenses.csv
+          retention-days: 180
