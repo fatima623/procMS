@@ -4,8 +4,9 @@ import { Role } from '@prisma/client';
 import { requireSessionCtx } from '@/interfaces/ui/auth';
 import { loadIndentDetail } from '@/interfaces/ui/views/IndentViews';
 import { StatusPill, toneForIndentStatus, toneForApprovalStatus } from '@/interfaces/ui/components/StatusPill';
-import { MoneyLabel } from '@/interfaces/ui/components/Money';
+import { MoneyLabel, MoneyCompact } from '@/interfaces/ui/components/Money';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
+import { KpiCard, type Accent } from '@/interfaces/ui/components/KpiCard';
 import { IndentActions } from './IndentActions';
 import { Attachments } from './Attachments';
 import { Comments } from './Comments';
@@ -13,11 +14,25 @@ import { commentService } from '@/application/comment/CommentService';
 
 export const dynamic = 'force-dynamic';
 
+const PRIORITY_ACCENT: Record<string, Accent> = { URGENT: 'coral', HIGH: 'amber', NORMAL: 'sky', LOW: 'violet' };
+const H_ICON = {
+  tag:    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>,
+  wallet: <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M16 13h3"/><path d="M3 10h18"/></svg>,
+  bolt:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h8l-1 8 10-12h-8z"/></svg>,
+  users:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>,
+  clock:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
+};
+
 export default async function IndentDetailPage({ params }: { params: { id: string } }) {
   const ctx = await requireSessionCtx();
   const indent = await loadIndentDetail(params.id);
   if (!indent) notFound();
   const comments = await commentService.listForIndent(indent.id);
+
+  const statusAccent: Accent = (['CLOSED'].includes(indent.status)) ? 'emerald'
+    : (['INDENT_REJECTED', 'BUDGET_REJECTED', 'CANCELLED'].includes(indent.status)) ? 'coral'
+    : 'indigo';
+  const priorityAccent = PRIORITY_ACCENT[indent.priority] ?? 'sky';
 
   return (
     <>
@@ -30,8 +45,15 @@ export default async function IndentDetailPage({ params }: { params: { id: strin
         </div>
         <div className="grow" />
         <Link href={`/indents/${indent.id}/print`} className="btn" target="_blank">Print 🖨</Link>
-        <StatusPill tone={toneForIndentStatus(indent.status)}>{indent.status}</StatusPill>
       </div>
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 18 }}>
+        <KpiCard accent={statusAccent}  icon={H_ICON.tag}    label="Status"    value={indent.status.replace(/_/g, ' ')} sub={`FY ${indent.fiscalYearLabel}`} />
+        <KpiCard accent="emerald"       icon={H_ICON.wallet} label="Estimated value" value={<MoneyCompact amountMinor={indent.estimatedValueMinor} currency={indent.currency} precision={2} />} sub={`${indent.items.length} line item${indent.items.length === 1 ? '' : 's'}`} />
+        <KpiCard accent={priorityAccent} icon={H_ICON.bolt}  label="Priority"  value={indent.priority}                sub={`Type ${indent.type}`} />
+        <KpiCard accent="sky"            icon={H_ICON.users} label="Section"   value={indent.sectionName}             sub={indent.assignedAdpName ? `ADP · ${indent.assignedAdpName}` : 'No ADP yet'} />
+        <KpiCard accent="violet"         icon={H_ICON.clock} label="Submitted" value={indent.submittedAt ? <DateLabel iso={indent.submittedAt} /> : 'Draft'} sub={<>Created <DateLabel iso={indent.createdAt} /></>} />
+      </section>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
         <div>

@@ -5,7 +5,15 @@ import { prisma } from '@/infrastructure/db/prisma';
 import { requireSessionCtx } from '@/interfaces/ui/auth';
 import { StatusPill, toneForApprovalStatus } from '@/interfaces/ui/components/StatusPill';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
+import { KpiCard, type Accent } from '@/interfaces/ui/components/KpiCard';
 import { DecideForm } from './DecideForm';
+
+const H_ICON = {
+  flow:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="12" cy="19" r="2"/><path d="M7 12h4M13 12h4M12 7v4M12 13v4"/></svg>,
+  user:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>,
+  stack:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>,
+  clock:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -37,6 +45,14 @@ export default async function ApprovalDetailPage({ params }: { params: { id: str
     return r ? { indentId: r.itPerforma.indent.id, indentNumber: r.itPerforma.indent.indentNumber, title: `CST • ${r.itPerforma.indent.subject}` } : null;
   })();
 
+  const statusAccent: Accent = chain.status === 'APPROVED' ? 'emerald'
+    : chain.status === 'REJECTED' ? 'coral'
+    : chain.status === 'WITHDRAWN' ? 'violet'
+    : 'indigo';
+  const decidedCount = chain.steps.filter((s) => s.status !== 'PENDING').length;
+  const openedAt = chain.steps[0]?.decidedAt ?? chain.createdAt.toISOString();
+  const ageDays = Math.max(0, Math.floor((Date.now() - new Date(openedAt).getTime()) / (24 * 3600 * 1000)));
+
   return (
     <>
       <h1>Approval chain</h1>
@@ -47,10 +63,12 @@ export default async function ApprovalDetailPage({ params }: { params: { id: str
         </p>
       )}
 
-      <div className="row" style={{ marginBottom: 12 }}>
-        <StatusPill tone={toneForApprovalStatus(chain.status)}>{chain.status}</StatusPill>
-        <span className="dim">Subject: {chain.subject.replace('_', ' ')}</span>
-      </div>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 18 }}>
+        <KpiCard accent={statusAccent} icon={H_ICON.flow}  label="Chain status" value={chain.status} sub={chain.subject.replace('_', ' ')} />
+        <KpiCard accent="amber"        icon={H_ICON.user}  label="Current actor" value={current ? current.role : '—'} sub={current ? `Step ${current.stepIndex + 1} of ${chain.steps.length}` : 'Chain finished'} />
+        <KpiCard accent="emerald"      icon={H_ICON.stack} label="Progress" value={`${decidedCount}/${chain.steps.length}`} sub={`${chain.steps.length - decidedCount} step${chain.steps.length - decidedCount === 1 ? '' : 's'} to go`} />
+        <KpiCard accent="violet"       icon={H_ICON.clock} label="Age" value={`${ageDays}d`} sub={<>Opened <DateLabel iso={openedAt} /></>} />
+      </section>
 
       <div className="card">
         <h3>Steps</h3>
