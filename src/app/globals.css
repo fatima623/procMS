@@ -185,49 +185,61 @@ h3 { font-size: 13px; margin: 16px 0 10px; color: var(--text-dim); text-transfor
   box-shadow: var(--shadow-sm);
 }
 
-/* ---- KPI tile — the premium per-metric card ---- */
+/* ---- KPI tile — the premium per-metric card ----
+   Every card renders as a gradient-tinted panel with white typography,
+   matching the hero-card look. The top accent stripe (::before) stays as a
+   subtle brighter edge. Set --kpi-accent-grad via the .k-* classes. */
 .kpi {
   position: relative;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
+  background: var(--kpi-accent-grad, var(--acc-indigo-grad));
+  border: 1px solid transparent;
   border-radius: var(--radius-xl);
   padding: 18px 20px 20px;
   display: block;
   text-decoration: none;
-  color: inherit;
+  color: #fff;
   overflow: hidden;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .kpi:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   text-decoration: none;
+  color: #fff;
 }
 .kpi::before {
-  /* top accent stripe — set --kpi-accent to flip color */
+  /* soft radial highlight — same treatment as .hero-card for a premium feel */
   content: "";
   position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  background: var(--kpi-accent, var(--accent));
-  opacity: 0.9;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(255,255,255,0.18), transparent 55%),
+    radial-gradient(circle at bottom left, rgba(0,0,0,0.10), transparent 60%);
+  pointer-events: none;
 }
+.kpi > * { position: relative; z-index: 1; }
 .kpi-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .kpi-label {
   flex: 1; min-width: 0;
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.85);
 }
 .kpi-value {
   font-family: var(--font-display);
   font-size: 32px; font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
-  color: var(--text);
+  color: #fff;
 }
-.kpi-value .suffix { font-size: 14px; font-weight: 500; color: var(--text-muted); margin-left: 4px; }
-.kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+.kpi-value .suffix { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.8); margin-left: 4px; }
+/* MoneyCompact + similar components mark the unit (Mn/K/PKR) with .muted;
+   on a coloured card we need to override that so it stays readable. */
+.kpi .muted, .kpi .dim { color: rgba(255, 255, 255, 0.85) !important; }
+.kpi-sub { font-size: 12px; color: rgba(255, 255, 255, 0.8); margin-top: 6px; }
+/* Icon chip on a coloured card: translucent white backing instead of accent-weak. */
+.kpi .icon-chip { background: rgba(255, 255, 255, 0.2); color: #fff; }
 .kpi-trend {
   display: inline-flex; align-items: center; gap: 3px;
   padding: 2px 8px;
@@ -287,16 +299,20 @@ h3 { font-size: 13px; margin: 16px 0 10px; color: var(--text-dim); text-transfor
   position: relative; z-index: 1;
   margin-top: 6px; opacity: 0.9; font-size: 13px;
 }
+/* MoneyCompact wraps the unit (Mn / K / PKR) in .muted; on a hero-card
+   that var is a muted grey that disappears against the gradient — force it
+   back to white so "17.27 Mn PKR" is fully legible. */
+.hero-card .muted, .hero-card .dim { color: rgba(255, 255, 255, 0.85) !important; }
 
-/* ---- Per-accent utility classes (set the stripe + chip colors) ---- */
-.k-indigo  { --kpi-accent: var(--acc-indigo);  }
-.k-coral   { --kpi-accent: var(--acc-coral);   }
-.k-amber   { --kpi-accent: var(--acc-amber);   }
-.k-emerald { --kpi-accent: var(--acc-emerald); }
-.k-sky     { --kpi-accent: var(--acc-sky);     }
-.k-violet  { --kpi-accent: var(--acc-violet);  }
-.k-pink    { --kpi-accent: var(--acc-pink);    }
-.k-teal    { --kpi-accent: var(--acc-teal);    }
+/* ---- Per-accent utility classes: pick a card's gradient background ---- */
+.k-indigo  { --kpi-accent-grad: var(--acc-indigo-grad);  --kpi-accent: var(--acc-indigo);  }
+.k-coral   { --kpi-accent-grad: var(--acc-coral-grad);   --kpi-accent: var(--acc-coral);   }
+.k-amber   { --kpi-accent-grad: var(--acc-amber-grad);   --kpi-accent: var(--acc-amber);   }
+.k-emerald { --kpi-accent-grad: var(--acc-emerald-grad); --kpi-accent: var(--acc-emerald); }
+.k-sky     { --kpi-accent-grad: var(--acc-sky-grad);     --kpi-accent: var(--acc-sky);     }
+.k-violet  { --kpi-accent-grad: var(--acc-violet-grad);  --kpi-accent: var(--acc-violet);  }
+.k-pink    { --kpi-accent-grad: var(--acc-pink-grad);    --kpi-accent: var(--acc-pink);    }
+.k-teal    { --kpi-accent-grad: var(--acc-teal-grad);    --kpi-accent: var(--acc-teal);    }
 
 .c-indigo  { --chip-bg: var(--acc-indigo-weak);  --chip-fg: var(--acc-indigo); }
 .c-coral   { --chip-bg: var(--acc-coral-weak);   --chip-fg: var(--acc-coral); }
