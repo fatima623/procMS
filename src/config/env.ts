@@ -41,7 +41,17 @@ export interface Env extends RawEnv {
   readonly isProduction: boolean;
 }
 
-const parsed = schema.safeParse(process.env);
+/**
+ * Trim leading/trailing whitespace from every env-var value before validating.
+ * Vercel's env-var editor silently preserves a tab or newline if you paste a
+ * value with one; without this the schema rejects `"\tinfo"` for LOG_LEVEL,
+ * `"http://x\n"` for NEXTAUTH_URL, etc. with a cryptic enum-mismatch error.
+ */
+const trimmed: Record<string, string | undefined> = {};
+for (const [k, v] of Object.entries(process.env)) {
+  trimmed[k] = typeof v === 'string' ? v.trim() : v;
+}
+const parsed = schema.safeParse(trimmed);
 if (!parsed.success) {
   // Formatted enough to be read in a terminal; no secrets echoed back.
   // eslint-disable-next-line no-console
