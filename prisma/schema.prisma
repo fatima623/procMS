@@ -30,6 +30,10 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["metrics", "relationJoins"]
+  // Vercel's Node 20 serverless runtime is RHEL 8 / OpenSSL 3; ship both the
+  // local dev binary and the Vercel one so `prisma generate` on either host
+  // produces a client that boots on both.
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
