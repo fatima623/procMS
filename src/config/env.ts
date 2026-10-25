@@ -42,16 +42,35 @@ export interface Env extends RawEnv {
 }
 
 /**
- * Trim leading/trailing whitespace from every env-var value before validating.
- * Vercel's env-var editor silently preserves a tab or newline if you paste a
- * value with one; without this the schema rejects `"\tinfo"` for LOG_LEVEL,
- * `"http://x\n"` for NEXTAUTH_URL, etc. with a cryptic enum-mismatch error.
+ * Trim leading/trailing whitespace from every env-var value before validating,
+ * AND write the trimmed value back onto process.env so downstream consumers
+ * that read process.env directly (notably Prisma's PrismaClient, which reads
+ * DATABASE_URL on construction) see the clean value too. Vercel's env-var
+ * editor silently preserves a tab or newline if you paste one with it.
  */
-const trimmed: Record<string, string | undefined> = {};
 for (const [k, v] of Object.entries(process.env)) {
-  trimmed[k] = typeof v === 'string' ? v.trim() : v;
+  if (typeof v === 'string') {
+    const t = v.trim();
+    if (t !== v) process.env[k] = t;
+  }
 }
-const parsed = schema.safeParse(trimmed);
+
+/**
+ * Normalize DATABASE_URL for Prisma's MySQL Query Engine. Aiven exposes a
+ * connection string with `?ssl-mode=REQUIRED` (MySQL CLI syntax), which
+ * Prisma Migrate tolerates but Prisma's runtime Query Engine rejects as
+ * "unsupported argument". Translate to the Prisma-native `sslaccept=strict`
+ * so copying the Aiven URL verbatim just works.
+ */
+if (typeof process.env.DATABASE_URL === 'string') {
+  const original = process.env.DATABASE_URL;
+  let fixed = original.replace(/([?&])ssl-mode=REQUIRED/i, '$1sslaccept=strict');
+  // Older `?ssl=true` also upsets the Query Engine; map it the same way.
+  fixed = fixed.replace(/([?&])ssl=true/i, '$1sslaccept=strict');
+  if (fixed !== original) process.env.DATABASE_URL = fixed;
+}
+
+const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
   // Formatted enough to be read in a terminal; no secrets echoed back.
   // eslint-disable-next-line no-console
