@@ -333,19 +333,23 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
                       <tr key={r.role}>
                         <td><StatusPill tone="info">{r.role}</StatusPill></td>
                         {r.cells.map((c) => {
-                          const intensity = c.decisions === 0 ? 0 : 0.15 + 0.55 * (c.decisions / max);
+                          // Use a darker indigo base (#4f46e5) and lift the min opacity
+                          // so cells are saturated enough for white text to be legible.
+                          const intensity = c.decisions === 0 ? 0 : 0.45 + 0.5 * (c.decisions / max);
+                          const isActive = c.decisions > 0;
                           return (
                             <td key={c.subject} style={{
-                              background: c.decisions === 0 ? 'transparent' : `rgba(129, 140, 248, ${intensity})`,
+                              background: isActive ? `rgba(79, 70, 229, ${intensity})` : 'transparent',
                               padding: '10px',
-                              borderRadius: c.decisions === 0 ? 0 : 'var(--radius-sm)',
+                              borderRadius: isActive ? 'var(--radius-sm)' : 0,
+                              color: isActive ? '#fff' : undefined,
                             }}>
-                              {c.decisions === 0 ? (
+                              {!isActive ? (
                                 <span className="muted">—</span>
                               ) : (
                                 <>
-                                  <div className="mono" style={{ fontWeight: 700 }}>{c.medianHours}<span className="muted" style={{ fontWeight: 400, fontSize: 11 }}> hr</span></div>
-                                  <div className="muted" style={{ fontSize: 11 }}>{c.decisions} decision{c.decisions === 1 ? '' : 's'}</div>
+                                  <div className="mono" style={{ fontWeight: 700, color: '#fff' }}>{c.medianHours}<span style={{ fontWeight: 400, fontSize: 11, color: 'rgba(255,255,255,0.8)' }}> hr</span></div>
+                                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)' }}>{c.decisions} decision{c.decisions === 1 ? '' : 's'}</div>
                                 </>
                               )}
                             </td>
