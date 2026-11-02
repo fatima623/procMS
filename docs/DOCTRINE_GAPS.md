@@ -268,20 +268,44 @@ rejectionReason, documentKey }`. Approving a VALUE / QTY amendment with a
 non-null delta moves the parent `Contract.value` in the same transaction.
 UI at **/governance/contract-amendments**.
 
-### B8. Risk purchase (DPP&I-35 Ch XXII) ❌
-Chapter XXII (pp. 157–163): on supplier failure, re-tender at supplier's cost
-and risk.
+### B8. Risk purchase (DPP&I-35 Ch XXII) ✅ *(2026-11-02)*
+Chapter XXII (pp. 157–163): on supplier failure, re-tender at supplier's
+cost and risk.
 
-**What to add.**
-- `RiskPurchase { originalContractId, triggerReason, newIndentId, newContractId, riskSettledMinor }`.
-- An action on a `TERMINATED` contract: "Initiate risk purchase" that cross-links a replacement indent.
+**Shipped.** `RiskPurchaseCase { originalContractId (unique),
+replacementIndentId?, replacementContractId? (unique), triggerReason,
+initiatedOn, initiatedByUserId, status (INITIATED/REPLACEMENT_AWARDED/
+SETTLED/CLOSED), riskSettled, currency, settledOn, closedOn, notes,
+version }` with open / link-replacement / settle / close endpoints.
+UI at **/frameworks/risk-purchases**.
 
-### B9. Rate Running Contracts / Framework agreements (DPP&I-35 Ch XXIII; PPRA Rule 16A) ❌
-Chapter XXIII (pp. 164–169): framework agreements for repeat purchases; call-off orders.
+**Still to do.** Auto-propose a risk-purchase case when a Contract is
+TERMINATED, and surface a "Risk purchase" badge on the terminated
+contract's row.
 
-**What to add.**
-- `FrameworkAgreement { preparedByUserId, firmIds[], validFrom, validTo, maxValueMinor }`.
-- `CallOffOrder { frameworkAgreementId, placedOn, amountMinor, lineItems[] }` — replaces the full indent for repeats.
+### B9. Rate Running Contracts / Framework agreements (DPP&I-35 Ch XXIII; PPRA Rule 16A) ✅ *(2026-11-02)*
+Chapter XXIII (pp. 164–169): framework agreements for repeat purchases;
+call-off orders.
+
+**Shipped.** `FrameworkAgreement { reference (unique), kind (OPEN /
+CLOSED), name, category, validFrom, validTo, maxValue, currency,
+status (DRAFT/ACTIVE/EXPIRED/TERMINATED), signedByUserId, signedOn,
+terminatedOn, terminatedReason, documentKey, version }` with
+`FrameworkAgreementFirm` join table + `CallOffOrder { callOffNumber
+(unique), firmId, description, amount, currency, placedOn,
+fulfilledOn, status (DRAFT/PLACED/FULFILLED/CANCELLED), cancelledOn,
+cancelledReason, documentKey }`. Services enforce:
+- framework kind + category + at least one participating firm on create;
+- call-off refuses unless framework is ACTIVE and firm is on it;
+- call-off currency must match framework currency.
+
+Lifecycle endpoints: create / activate / terminate on framework,
+place / fulfill / cancel on call-off. UI at **/frameworks/agreements**
+and **/frameworks/call-offs**.
+
+**Still to do.** A nightly job that flips ACTIVE → EXPIRED when
+validTo passes. Linking Indent.plannedItemId or Contract to a
+call-off order for traceability.
 
 ### B10. Foreign Military Sales (DPP&I-35 Ch XXIV) ❌
 Chapter XXIV (pp. 170–178): government-to-government procurement under FMS.

@@ -1160,6 +1160,129 @@ model Inspection {
 }
 
 // =============================================================================
+// Risk Purchase (DPP&I-35 Ch XXII)
+//
+// When a supplier fails to perform, the procuring agency may re-tender the
+// defaulted scope at the defaulter's cost and risk. A RiskPurchaseCase links
+// the original contract to the replacement indent and tracks settlement.
+// =============================================================================
+
+enum RiskPurchaseStatus {
+  INITIATED
+  REPLACEMENT_AWARDED
+  SETTLED
+  CLOSED
+}
+
+model RiskPurchaseCase {
+  id                     String             @id @db.VarChar(26)
+  originalContractId     String             @unique @db.VarChar(26)
+  replacementIndentId    String?            @db.VarChar(26)
+  replacementContractId  String?            @unique @db.VarChar(26)
+  triggerReason          String             @db.Text
+  initiatedOn            DateTime           @db.Date
+  initiatedByUserId      String             @db.VarChar(26)
+  status                 RiskPurchaseStatus @default(INITIATED)
+  riskSettled            Decimal?           @db.Decimal(20, 4)
+  currency               String             @default("PKR") @db.VarChar(3)
+  settledOn              DateTime?          @db.Date
+  closedOn               DateTime?          @db.Date
+  notes                  String?            @db.Text
+  createdAt              DateTime           @default(now()) @db.DateTime(6)
+  updatedAt              DateTime           @updatedAt @db.DateTime(6)
+  version                Int                @default(0)
+
+  @@index([status, initiatedOn])
+}
+
+// =============================================================================
+// Framework agreements + Call-off orders (DPP&I-35 Ch XXIII; PPRA Rule 16A)
+//
+// A FrameworkAgreement is a pre-negotiated instrument with one or more firms
+// at agreed prices. CallOffOrders draw on it without running a fresh IT.
+// =============================================================================
+
+enum FrameworkAgreementKind {
+  OPEN     // multiple firms, re-opened for mini-competitions
+  CLOSED   // single or small set of firms at fixed prices
+}
+
+enum FrameworkAgreementStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model FrameworkAgreement {
+  id                   String                   @id @db.VarChar(26)
+  reference            String                   @unique @db.VarChar(60)
+  kind                 FrameworkAgreementKind
+  name                 String                   @db.VarChar(255)
+  category             ProcurementCategory      @default(GOODS)
+  validFrom            DateTime                 @db.Date
+  validTo              DateTime                 @db.Date
+  maxValue             Decimal?                 @db.Decimal(20, 4)
+  currency             String                   @default("PKR") @db.VarChar(3)
+  status               FrameworkAgreementStatus @default(DRAFT)
+  signedByUserId       String?                  @db.VarChar(26)
+  signedOn             DateTime?                @db.Date
+  terminatedOn         DateTime?                @db.Date
+  terminatedReason     String?                  @db.Text
+  documentKey          String?                  @db.VarChar(500)
+  createdAt            DateTime                 @default(now()) @db.DateTime(6)
+  updatedAt            DateTime                 @updatedAt @db.DateTime(6)
+  version              Int                      @default(0)
+
+  firms      FrameworkAgreementFirm[]
+  callOffs   CallOffOrder[]
+
+  @@index([status, validTo])
+}
+
+model FrameworkAgreementFirm {
+  id                     String   @id @db.VarChar(26)
+  frameworkAgreementId   String   @db.VarChar(26)
+  firmId                 String   @db.VarChar(26)
+  pricingNotes           String?  @db.Text
+  createdAt              DateTime @default(now()) @db.DateTime(6)
+
+  framework FrameworkAgreement @relation(fields: [frameworkAgreementId], references: [id], onDelete: Cascade)
+
+  @@unique([frameworkAgreementId, firmId])
+  @@index([frameworkAgreementId])
+}
+
+enum CallOffStatus {
+  DRAFT
+  PLACED
+  FULFILLED
+  CANCELLED
+}
+
+model CallOffOrder {
+  id                   String        @id @db.VarChar(26)
+  frameworkAgreementId String        @db.VarChar(26)
+  firmId               String        @db.VarChar(26)
+  callOffNumber        String        @unique @db.VarChar(60)
+  description          String        @db.VarChar(500)
+  amount               Decimal       @db.Decimal(20, 4)
+  currency             String        @default("PKR") @db.VarChar(3)
+  placedOn             DateTime      @db.Date
+  fulfilledOn          DateTime?     @db.Date
+  status               CallOffStatus @default(PLACED)
+  cancelledOn          DateTime?     @db.Date
+  cancelledReason      String?       @db.Text
+  documentKey          String?       @db.VarChar(500)
+  createdAt            DateTime      @default(now()) @db.DateTime(6)
+  updatedAt            DateTime      @updatedAt @db.DateTime(6)
+
+  framework FrameworkAgreement @relation(fields: [frameworkAgreementId], references: [id])
+
+  @@index([frameworkAgreementId, placedOn])
+}
+
+// =============================================================================
 // Transparency + retention (PPRA Rules 46, 47, 50)
 //
 // Mis-procurement incidents, retention holds, and the "withholding approval"

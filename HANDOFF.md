@@ -147,6 +147,8 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
     column (PPRA Rule 26).
   - `20261102260000_add_transparency_retention` — MisprocurementIncident + RetentionHold
     tables (PPRA Rules 46, 50).
+  - `20261102280000_add_risk_purchase_framework` — RiskPurchaseCase, FrameworkAgreement,
+    FrameworkAgreementFirm, CallOffOrder tables (DPP&I-35 Chapters XXII, XXIII; PPRA Rule 16A).
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is
