@@ -25,18 +25,33 @@ const NAV_ICON = {
   gear:      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1A1.7 1.7 0 004.6 9a1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1A1.7 1.7 0 0019.4 9V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg>,
 };
 
+/** Admin + ADP/COORD staff see mid-workflow lists and the execution hub. */
+const SHOW_WORKFLOW = (r: readonly Role[]): boolean =>
+  r.includes(Role.ADMIN) || r.includes(Role.ADP_STAFF) || r.includes(Role.COORD_STAFF);
+
 const NAV: NavItem[] = [
-  { href: '/dashboard',         label: 'Dashboard',             icon: NAV_ICON.dashboard, show: () => true },
-  { href: '/search',            label: 'Search',                icon: NAV_ICON.search,    show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
-  { href: '/indents',           label: 'Indents',               icon: NAV_ICON.stack,     show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
-  { href: '/approvals',         label: 'My approvals',          icon: NAV_ICON.check,     show: (r) => [Role.AD, Role.DD, Role.DP_N, Role.DGDP, Role.SECY_DP, Role.SUPTD, Role.CPO, Role.ADMIN].some((x) => r.includes(x)) },
-  { href: '/tsrs',              label: 'TSR queue',             icon: NAV_ICON.wrench,    show: (r) => r.includes(Role.INSPECTORATE) || r.includes(Role.ADMIN) },
-  { href: '/firm/invites',      label: 'IT invites',            icon: NAV_ICON.mail,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
-  { href: '/firm/queries',      label: 'Queries',               icon: NAV_ICON.chat,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
-  { href: '/firm/prs',          label: 'Purchase requisitions', icon: NAV_ICON.doc,       show: (r, f) => !!f || r.includes(Role.ADMIN) },
-  { href: '/settings/security', label: 'Security',              icon: NAV_ICON.shield,    show: () => true },
-  { href: '/docs',              label: 'API docs',              icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) },
-  { href: '/admin',             label: 'Admin',                 icon: NAV_ICON.gear,      show: (r) => r.includes(Role.ADMIN) },
+  { href: '/dashboard',          label: 'Dashboard',             icon: NAV_ICON.dashboard, show: () => true },
+  { href: '/search',             label: 'Search',                icon: NAV_ICON.search,    show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
+  { href: '/indents',            label: 'Indents',               icon: NAV_ICON.stack,     show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
+  { href: '/approvals',          label: 'My approvals',          icon: NAV_ICON.check,     show: (r) => [Role.AD, Role.DD, Role.DP_N, Role.DGDP, Role.SECY_DP, Role.SUPTD, Role.CPO, Role.ADMIN].some((x) => r.includes(x)) },
+  { href: '/it-proformas',       label: 'IT Proformas',          icon: NAV_ICON.mail,      show: SHOW_WORKFLOW },
+  { href: '/tsrs',               label: 'TSR queue',             icon: NAV_ICON.wrench,    show: (r) => r.includes(Role.INSPECTORATE) || r.includes(Role.ADMIN) },
+  { href: '/commercial-offers',  label: 'Commercial offers',     icon: NAV_ICON.mail,      show: SHOW_WORKFLOW },
+  { href: '/csts',               label: 'CSTs',                  icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
+  { href: '/prs',                label: 'Purchase Requisitions', icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
+  { href: '/execution',          label: 'Execution',             icon: NAV_ICON.book,      show: SHOW_WORKFLOW },
+  { href: '/compliance',         label: 'Compliance',            icon: NAV_ICON.shield,    show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) || r.includes(Role.ADP_STAFF) || r.includes(Role.COORD_STAFF) },
+  { href: '/registration',       label: 'Pre-qualification',     icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
+  { href: '/governance',         label: 'Governance',            icon: NAV_ICON.gear,      show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) || r.includes(Role.ADP_STAFF) || r.includes(Role.COORD_STAFF) },
+  { href: '/planning',           label: 'Planning',              icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) || r.includes(Role.COORD_STAFF) },
+  { href: '/transparency',       label: 'Transparency',          icon: NAV_ICON.shield,    show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) },
+  { href: '/frameworks',         label: 'Frameworks',            icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
+  { href: '/firm/invites',       label: 'IT invites',            icon: NAV_ICON.mail,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
+  { href: '/firm/queries',       label: 'Firm queries',          icon: NAV_ICON.chat,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
+  { href: '/firm/prs',           label: 'Firm PRs',              icon: NAV_ICON.doc,       show: (r, f) => !!f || r.includes(Role.ADMIN) },
+  { href: '/settings/security',  label: 'Security',              icon: NAV_ICON.shield,    show: () => true },
+  { href: '/docs',               label: 'API docs',              icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) },
+  { href: '/admin',              label: 'Admin',                 icon: NAV_ICON.gear,      show: (r) => r.includes(Role.ADMIN) },
 ];
 
 export default async function AppLayout({ children }: { children: ReactNode }) {

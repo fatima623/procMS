@@ -16,6 +16,8 @@ import type { Logger } from '../ports/Logger';
 import type { UnitOfWork } from '../ports/UnitOfWork';
 import { notificationService } from '../notification/NotificationService';
 import { prisma } from '@/infrastructure/db/prisma';
+import { compliancePolicy } from '@/infrastructure/compliance/CompliancePolicyService';
+import { decimalToMinor } from '@/infrastructure/common/decimal';
 
 export interface IssuePRDto {
   readonly cstId: string;
@@ -44,6 +46,38 @@ export class IssuePRUseCase {
   public async execute(ctx: AuthContext, dto: IssuePRDto): Promise<{ prId: string; prNumber: string }> {
     if (!hasRole(ctx, Role.ADP_STAFF, Role.COORD_STAFF, Role.ADMIN)) {
       throw new ForbiddenError('Not permitted to issue PR');
+    }
+
+    // Compliance pre-flight guards (PPRA Rule 7 / Rule 19 / Rules 48–50).
+    // These read-only checks run BEFORE the UoW transaction so they fail-fast
+    // without opening a transaction we would only roll back. Read the CST →
+    // IT → Indent chain here only enough to know firm and estimated value.
+    const cstHead = await prisma.cST.findUnique({
+      where: { id: dto.cstId },
+      select: {
+        itPerforma: {
+          select: {
+            indent: { select: { id: true, estimatedValue: true } },
+          },
+        },
+        lines: {
+          where: { recommendedForAward: true },
+          select: { commercialOffer: { select: { firmId: true } } },
+          take: 1,
+        },
+      },
+    });
+    if (cstHead && cstHead.lines[0]?.commercialOffer) {
+      const indent = cstHead.itPerforma.indent;
+      const firmId = cstHead.lines[0].commercialOffer.firmId;
+      const now = this.deps.clock.now();
+      await compliancePolicy.assertFirmNotBlacklisted(firmId, now);
+      await compliancePolicy.assertNoBlockingGrievance(indent.id);
+      await compliancePolicy.assertIntegrityPactPresentIfRequired(
+        indent.id,
+        firmId,
+        decimalToMinor(indent.estimatedValue),
+      );
     }
 
     return this.deps.uow.run(async (h) => {

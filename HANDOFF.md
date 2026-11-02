@@ -73,19 +73,48 @@ just use `procMS`.
   `procMS` merged in); `CLAUDE.md` + this `HANDOFF.md` committed to `main` and pushed to **both**
   `procMS` and `procurement-system`, so a fresh clone of either has them immediately.
 - The app runs (Next.js 14 + Prisma + MySQL); schema already includes the execution-half models.
-- **UI/UX / workflow improvement work has NOT started yet** — this is the kick-off handoff.
+- **Branch `feat/admin-workflows`** — kicked off on 2026-11-02. Two commits so far:
+  1. `5d514f2` — admin-visible top-level list pages (IT Proformas / Commercial Offers / CSTs /
+     PRs), Execution hub with create forms for Advertisement / Contract / Guarantee / Invoice /
+     Payment / LC / LC Amendment, "Start TSR" button on `/tsrs`, plus `docs/E2E_WORKFLOW_GUIDE.md`
+     and `docs/DOCTRINE_GAPS.md`.
+  2. **Compliance controls** — three new workflows per the doctrine gaps:
+     - **Blacklist** (PPRA Rule 19) — model, migration, admin service, declare + revoke endpoints,
+       UI at `/compliance/blacklists`.
+     - **Integrity Pact** (PPRA Rule 7) — model, migration, create + counter-sign endpoints,
+       UI at `/compliance/integrity-pacts`.
+     - **Grievance / GRC** (PPRA Rules 48 / 50) — model, migration, file + decide + appeal +
+       withdraw endpoints, UI at `/compliance/grievances`.
+     - Three guards wired into `IssuePRUseCase` so a blacklisted firm, a pending pre-award
+       grievance, or a missing Integrity Pact (indent > PKR 10 M) refuses the PR issue.
+     - `tests/domain/ComplianceSchemas.test.ts` — 12 passing vitest cases locking the Zod shapes.
+     - Prisma migration `20261102120000_add_compliance_controls` — the next machine needs to run
+       `npx prisma migrate dev` to apply it.
 
 ## Where to continue next
 
-**Goal:** improve the **workflows and UI/UX** of ProcMS.
+**Branch:** `feat/admin-workflows` (not `feat/ui-ux`). Pull it and build on the three guards
+already added. The remaining top-priority items from `docs/DOCTRINE_GAPS.md § D` are:
 
-The specific first target is the user's call — when you resume, ask (or confirm) which screen /
-workflow to tackle first, then work on a `feat/ui-ux` branch. Sensible entry points to offer:
-- **Approval chain screen** (`src/app/(app)/approvals/…`) — the multi-step approval UI shown during
-  companion testing; a good candidate for clearer step status, actor cues, and the decision form.
-- **Indent create/detail** (`src/app/(app)/indents/…`) — the aggregate root; the most-used flow.
-- **Dashboard** (`src/app/(app)/dashboard/…`) — KPI cards, navigation, at-a-glance workflow state.
-- **TSR / CST** screens — dense tabular review steps that usually benefit most from UX work.
+1. **~~B1 — DP extensions + LD~~** ✅ shipped on `feat/admin-workflows` (commit after `9d313d8`).
+   Still to do: auto-compute 10% cap, and offset LD from Payment amounts.
+2. **~~B2 — Inspection reports + discrepancies~~** ✅ shipped on `feat/admin-workflows`.
+   Still to do: a dedicated `IssueTakingOverCertificate` use-case on `Contract` that calls
+   `executionObligations.assertNoOpenDiscrepancies(contractId)`.
+3. **Wider blacklist guard integration.** The guard is only in `IssuePRUseCase` today — also
+   hook it into IT invite creation and `OpenCommercialOfferUseCase` so a blacklisted firm is
+   refused earlier.
+4. **Committee registry** for the GRC (odd-numbered members, term dates) — PPRA Rule 48.
+5. **Seeding** — the ZeroLink gap note still applies: only ~4 of 23 seeded indents reach
+   award + execution; seed more cases through to Contract/Invoice/Payment so execution rules
+   stop being `NOT_EVALUABLE`.
+6. **Pre-qualification of firms** (A3) — the next big chapter from `DOCTRINE_GAPS.md`.
+
+Other sensible UI/UX targets that remain unchanged from the earlier handoff:
+- **Approval chain screen** (`src/app/(app)/approvals/…`)
+- **Indent create/detail** (`src/app/(app)/indents/…`)
+- **Dashboard** (`src/app/(app)/dashboard/…`) — add a "compliance posture" tile that reads from
+  the new models (active blacklists, pending grievances, pacts awaiting counter-signature).
 
 **Guardrails while changing UI (see CLAUDE.md → ZeroLinkAI compliance context):**
 - Keep form fields labelled and values unambiguous — the ZeroLink screen companion reads these
@@ -100,7 +129,27 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
 ---
 
 ## Quick facts
-- **Working branch:** `feat/ui-ux` (create on first use). `main` stays releasable.
+- **Working branch:** `feat/admin-workflows` (superseded `feat/ui-ux`). `main` stays releasable.
 - **Run it:** `npm install && npx prisma migrate dev && npm run seed && npm run dev` → `http://localhost:3000` (companion tests used `-p 3200`).
+- **New migrations to apply after pull:**
+  - `20261102120000_add_compliance_controls` — Blacklist, IntegrityPact, Grievance tables.
+  - `20261102140000_add_execution_obligations` — DeliveryPeriodExtension, LiquidatedDamages,
+    Inspection, Discrepancy tables + `Contract.originalDP` column.
+  - `20261102160000_add_firm_registration` — FirmRegistration table (pre-qualification).
+  - `20261102180000_add_committees_contract_amendments` — Committee, CommitteeMember,
+    ContractAmendment tables.
+  - `20261102200000_add_execution_evidence` — Insurance, Shipment, EndUserCertificate,
+    AgentCommission tables (DPP&I-35 Chapters XVII–XX).
+  - `20261102220000_add_annual_plan_bidding_doc_templates` — AnnualProcurementPlan,
+    AnnualProcurementPlanItem, BiddingDocumentTemplate tables, plus `Indent.plannedItemId`
+    column (PPRA Rules 8 and 23(4)).
+  - `20261102240000_add_preaward_compliance` — adds `CommercialOffer.bidValidUntil`
+    column (PPRA Rule 26).
+  - `20261102260000_add_transparency_retention` — MisprocurementIncident + RetentionHold
+    tables (PPRA Rules 46, 50).
+  - `20261102280000_add_risk_purchase_framework` — RiskPurchaseCase, FrameworkAgreement,
+    FrameworkAgreementFirm, CallOffOrder tables (DPP&I-35 Chapters XXII, XXIII; PPRA Rule 16A).
+  Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
-- **Push target:** `git push origin feat/ui-ux` on a fresh `procMS` clone (its `origin` = procMS).
+- **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is
+  named `remote`, so `git push remote feat/admin-workflows`; a fresh `procMS` clone names it `origin`).

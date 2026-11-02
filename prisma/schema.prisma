@@ -169,8 +169,9 @@ model FiscalYear {
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now()) @db.DateTime(6)
 
-  budgetAllocations BudgetAllocation[]
-  indents           Indent[]
+  budgetAllocations      BudgetAllocation[]
+  indents                Indent[]
+  annualProcurementPlans AnnualProcurementPlan[]
 }
 
 model BudgetHead {
@@ -180,8 +181,9 @@ model BudgetHead {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now()) @db.DateTime(6)
 
-  allocations BudgetAllocation[]
-  indents     Indent[]
+  allocations            BudgetAllocation[]
+  indents                Indent[]
+  annualPlanItems        AnnualProcurementPlanItem[]
 }
 
 model BudgetAllocation {
@@ -214,7 +216,7 @@ model Firm {
   country       String?  @db.VarChar(120)
   email         String?  @db.VarChar(254)
   phone         String?  @db.VarChar(60)
-  isBlacklisted Boolean  @default(false)
+  isBlacklisted Boolean  @default(false) // denormalised cache; derived from Blacklist rows with status=ACTIVE
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now()) @db.DateTime(6)
   updatedAt     DateTime @updatedAt @db.DateTime(6)
@@ -226,6 +228,10 @@ model Firm {
   tsrQueries           TSRQuery[]
   purchaseRequisitions PurchaseRequisition[]
   contracts            Contract[]
+  blacklists           Blacklist[]
+  grievances           Grievance[]
+  integrityPacts       IntegrityPact[]
+  registrations        FirmRegistration[]
 }
 
 // -----------------------------------------------------------------------------
@@ -304,11 +310,12 @@ model Indent {
   estimatedValue Decimal @db.Decimal(20, 4)
   currency       String  @default("PKR") @db.VarChar(3)
 
-  indenterId    String  @db.VarChar(26)
-  sectionId     String  @db.VarChar(26) // owning section (indenter's)
-  assignedAdpId String? @db.VarChar(26) // Concerned ADP section
-  fiscalYearId  String  @db.VarChar(26)
-  budgetHeadId  String  @db.VarChar(26)
+  indenterId     String  @db.VarChar(26)
+  sectionId      String  @db.VarChar(26) // owning section (indenter's)
+  assignedAdpId  String? @db.VarChar(26) // Concerned ADP section
+  fiscalYearId   String  @db.VarChar(26)
+  budgetHeadId   String  @db.VarChar(26)
+  plannedItemId  String? @db.VarChar(26) // optional link to annual plan item (PPRA Rule 8)
 
   submittedAt     DateTime? @db.DateTime(6)
   closedAt        DateTime? @db.DateTime(6)
@@ -319,11 +326,12 @@ model Indent {
   updatedAt DateTime @updatedAt @db.DateTime(6)
   version   Int      @default(0)
 
-  indenter    User       @relation("IndenterToIndent", fields: [indenterId], references: [id])
-  section     Section    @relation("OwningSection", fields: [sectionId], references: [id])
-  assignedAdp Section?   @relation("AssignedAdp", fields: [assignedAdpId], references: [id])
-  fiscalYear  FiscalYear @relation(fields: [fiscalYearId], references: [id])
-  budgetHead  BudgetHead @relation(fields: [budgetHeadId], references: [id])
+  indenter    User                        @relation("IndenterToIndent", fields: [indenterId], references: [id])
+  section     Section                     @relation("OwningSection", fields: [sectionId], references: [id])
+  assignedAdp Section?                    @relation("AssignedAdp", fields: [assignedAdpId], references: [id])
+  fiscalYear  FiscalYear                  @relation(fields: [fiscalYearId], references: [id])
+  budgetHead  BudgetHead                  @relation(fields: [budgetHeadId], references: [id])
+  plannedItem AnnualProcurementPlanItem?  @relation("PlanItemToIndent", fields: [plannedItemId], references: [id])
 
   items          IndentItem[]
   itPerforma     ITPerforma?
@@ -333,6 +341,8 @@ model Indent {
   comments       Comment[]
   advertisements Advertisement[]
   contract       Contract?
+  grievances     Grievance[]
+  integrityPacts IntegrityPact[]
 
   @@index([status])
   @@index([sectionId])
@@ -615,6 +625,7 @@ model CommercialOffer {
   totalPrice        Decimal     @db.Decimal(20, 4)
   currency          String      @default("PKR") @db.VarChar(3)
   bidSecurityAmount Decimal?    @db.Decimal(20, 4) // ZeroLink merge — PPRA r25 (bid security ≤ 5% of estimate)
+  bidValidUntil     DateTime?   @db.Date // PPRA r26 — bid validity date
   deliveryWeeks     Int?
   status            OfferStatus @default(RECEIVED)
   documentKey       String?     @db.VarChar(500)
@@ -852,6 +863,7 @@ model Contract {
   currency              String                  @default("PKR") @db.VarChar(3)
   awardedOn             DateTime?               @db.Date
   signedOn              DateTime?               @db.Date
+  originalDP            DateTime?               @db.Date // original delivery period (DPP&I-35 Ch XIII)
   status                ExecutionContractStatus @default(SIGNED)
   takingOverCertifiedOn DateTime?               @db.Date // taking-over certificate issued
   closedOn              DateTime?               @db.Date // contract formally closed
@@ -863,10 +875,18 @@ model Contract {
   firm                Firm                 @relation(fields: [firmId], references: [id])
   purchaseRequisition PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
 
-  guarantees      Guarantee[]
-  invoices        Invoice[]
-  payments        Payment[]
-  lettersOfCredit LetterOfCredit[]
+  guarantees        Guarantee[]
+  invoices          Invoice[]
+  payments          Payment[]
+  lettersOfCredit   LetterOfCredit[]
+  dpExtensions      DeliveryPeriodExtension[]
+  liquidatedDamages LiquidatedDamages[]
+  inspections       Inspection[]
+  amendments        ContractAmendment[]
+  insurances        Insurance[]
+  shipments         Shipment[]
+  endUserCerts      EndUserCertificate[]
+  agentCommissions  AgentCommission[]
 
   @@index([firmId])
   @@index([status])
@@ -947,4 +967,742 @@ model LCAmendment {
   letterOfCredit LetterOfCredit @relation(fields: [letterOfCreditId], references: [id], onDelete: Cascade)
 
   @@index([letterOfCreditId])
+}
+
+// =============================================================================
+// Compliance-controls (PPRA + DPP&I-35 — ZeroLink gap fills)
+//
+// Three cross-cutting controls the base system did not capture, each guarding a
+// workflow transition elsewhere:
+//
+//   - Blacklist      (PPRA Rule 19)   — bars award / invite to a blacklisted firm
+//   - IntegrityPact  (PPRA Rule 7)    — required for every procurement > PKR 10M
+//   - Grievance      (PPRA Rules 48/50; DPP&I-35 Ch XXVIII)
+//                                     — bars PR issue / contract award while PENDING
+//
+// `Firm.isBlacklisted` is kept as a denormalised fast-path flag that the
+// Blacklist use-cases keep in sync; the authoritative source is the Blacklist
+// row set.
+// =============================================================================
+
+enum BlacklistStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum BlacklistGround {
+  CORRUPT_PRACTICE
+  FRAUDULENT_PRACTICE
+  COERCIVE_PRACTICE
+  COLLUSIVE_PRACTICE
+  OBSTRUCTIVE_PRACTICE
+  PERFORMANCE_FAILURE
+  BID_DEVIATION
+  OTHER
+}
+
+model Blacklist {
+  id              String          @id @db.VarChar(26)
+  firmId          String          @db.VarChar(26)
+  declaredOn      DateTime        @db.Date
+  effectiveFrom   DateTime        @db.Date
+  effectiveUntil  DateTime?       @db.Date // null = indefinite until revoked
+  ground          BlacklistGround
+  reason          String          @db.Text
+  decidedByUserId String          @db.VarChar(26)
+  documentKey     String?         @db.VarChar(500) // S3/object-store key for the signed order
+  status          BlacklistStatus @default(ACTIVE)
+  revokedOn       DateTime?       @db.Date
+  revokedByUserId String?         @db.VarChar(26)
+  revokedReason   String?         @db.Text
+  createdAt       DateTime        @default(now()) @db.DateTime(6)
+  updatedAt       DateTime        @updatedAt @db.DateTime(6)
+  version         Int             @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, status])
+  @@index([status, effectiveUntil])
+}
+
+model IntegrityPact {
+  id                  String    @id @db.VarChar(26)
+  indentId            String    @db.VarChar(26)
+  firmId              String    @db.VarChar(26)
+  signedByBuyerUserId String    @db.VarChar(26)
+  signedByBuyerOn     DateTime  @db.Date
+  signedBySupplierOn  DateTime? @db.Date // populated once the firm counter-signs
+  documentKey         String?   @db.VarChar(500)
+  createdAt           DateTime  @default(now()) @db.DateTime(6)
+  updatedAt           DateTime  @updatedAt @db.DateTime(6)
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  firm   Firm   @relation(fields: [firmId], references: [id])
+
+  @@unique([indentId, firmId]) // one pact per firm per indent
+  @@index([indentId])
+}
+
+enum GrievanceStatus {
+  PENDING
+  UPHELD
+  REJECTED
+  WITHDRAWN
+  APPEALED
+}
+
+enum GrievanceStage {
+  PRE_AWARD   // raised before award — blocks PR issue + contract award
+  POST_AWARD  // raised after award — informational / appeals
+}
+
+model Grievance {
+  id                String          @id @db.VarChar(26)
+  indentId          String          @db.VarChar(26)
+  firmId            String?         @db.VarChar(26) // null = anonymous bidder complaint
+  filedByUserId     String?         @db.VarChar(26) // internal filer when applicable
+  filedOn           DateTime        @db.Date
+  basis             String          @db.Text        // the complaint, as filed
+  stage             GrievanceStage  @default(PRE_AWARD)
+  status            GrievanceStatus @default(PENDING)
+  grcDecisionOn     DateTime?       @db.Date        // PPRA Rule 48/50 — decide within 10 working days
+  grcDecisionText   String?         @db.Text
+  appealedToPPRAOn  DateTime?       @db.Date
+  documentKey       String?         @db.VarChar(500)
+  createdAt         DateTime        @default(now()) @db.DateTime(6)
+  updatedAt         DateTime        @updatedAt @db.DateTime(6)
+  version           Int             @default(0)
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  firm   Firm?  @relation(fields: [firmId], references: [id])
+
+  @@index([indentId, status])
+  @@index([status, filedOn])
+}
+
+// =============================================================================
+// Execution-stage obligations (DPP&I-35 Ch XIII delivery period + LD; Ch XVI
+// inspection + discrepancies).
+//
+//   - DeliveryPeriodExtension — a formal extension of the contractual DP,
+//     recorded with reason, authority, and the new DP date.
+//   - LiquidatedDamages      — assessment against the supplier for a delay.
+//     Typically 2% per month of delay, capped at 10% of contract value.
+//   - Inspection             — Inspectorate check of delivered stores.
+//                              The outcome gates the Taking-Over Certificate.
+//   - Discrepancy            — a specific defect raised during an Inspection
+//                              and resolved before closure.
+// =============================================================================
+
+model DeliveryPeriodExtension {
+  id              String   @id @db.VarChar(26)
+  contractId      String   @db.VarChar(26)
+  previousDP      DateTime @db.Date
+  newDP           DateTime @db.Date
+  reason          String   @db.Text
+  grantedByUserId String   @db.VarChar(26)
+  grantedOn       DateTime @db.Date
+  documentKey     String?  @db.VarChar(500)
+  createdAt       DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, grantedOn])
+}
+
+enum LDBasis {
+  PER_DAY     // amount per day of delay
+  PER_WEEK    // amount per week of delay
+  PER_MONTH   // amount per month of delay (DPP&I-35 default)
+  LUMP_SUM
+}
+
+model LiquidatedDamages {
+  id            String   @id @db.VarChar(26)
+  contractId    String   @db.VarChar(26)
+  assessedOn    DateTime @db.Date
+  periodFrom    DateTime @db.Date // start of the delay window
+  periodTo      DateTime @db.Date // end of the delay window
+  basis         LDBasis  @default(PER_MONTH)
+  amount        Decimal  @db.Decimal(20, 4) // the LD amount assessed
+  currency      String   @default("PKR") @db.VarChar(3)
+  waivedAmount  Decimal? @db.Decimal(20, 4) // waiver / discount granted
+  waivedReason  String?  @db.Text
+  assessedByUserId String @db.VarChar(26)
+  createdAt     DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, assessedOn])
+}
+
+enum InspectionVerdict {
+  ACCEPTED
+  DISCREPANCY
+  REJECTED
+}
+
+model Inspection {
+  id                String            @id @db.VarChar(26)
+  contractId        String            @db.VarChar(26)
+  performedByUserId String            @db.VarChar(26) // INSPECTORATE
+  performedOn       DateTime          @db.Date
+  verdict           InspectionVerdict
+  summary           String            @db.Text
+  documentKey       String?           @db.VarChar(500)
+  createdAt         DateTime          @default(now()) @db.DateTime(6)
+
+  contract      Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  discrepancies Discrepancy[]
+
+  @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Risk Purchase (DPP&I-35 Ch XXII)
+//
+// When a supplier fails to perform, the procuring agency may re-tender the
+// defaulted scope at the defaulter's cost and risk. A RiskPurchaseCase links
+// the original contract to the replacement indent and tracks settlement.
+// =============================================================================
+
+enum RiskPurchaseStatus {
+  INITIATED
+  REPLACEMENT_AWARDED
+  SETTLED
+  CLOSED
+}
+
+model RiskPurchaseCase {
+  id                     String             @id @db.VarChar(26)
+  originalContractId     String             @unique @db.VarChar(26)
+  replacementIndentId    String?            @db.VarChar(26)
+  replacementContractId  String?            @unique @db.VarChar(26)
+  triggerReason          String             @db.Text
+  initiatedOn            DateTime           @db.Date
+  initiatedByUserId      String             @db.VarChar(26)
+  status                 RiskPurchaseStatus @default(INITIATED)
+  riskSettled            Decimal?           @db.Decimal(20, 4)
+  currency               String             @default("PKR") @db.VarChar(3)
+  settledOn              DateTime?          @db.Date
+  closedOn               DateTime?          @db.Date
+  notes                  String?            @db.Text
+  createdAt              DateTime           @default(now()) @db.DateTime(6)
+  updatedAt              DateTime           @updatedAt @db.DateTime(6)
+  version                Int                @default(0)
+
+  @@index([status, initiatedOn])
+}
+
+// =============================================================================
+// Framework agreements + Call-off orders (DPP&I-35 Ch XXIII; PPRA Rule 16A)
+//
+// A FrameworkAgreement is a pre-negotiated instrument with one or more firms
+// at agreed prices. CallOffOrders draw on it without running a fresh IT.
+// =============================================================================
+
+enum FrameworkAgreementKind {
+  OPEN     // multiple firms, re-opened for mini-competitions
+  CLOSED   // single or small set of firms at fixed prices
+}
+
+enum FrameworkAgreementStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+model FrameworkAgreement {
+  id                   String                   @id @db.VarChar(26)
+  reference            String                   @unique @db.VarChar(60)
+  kind                 FrameworkAgreementKind
+  name                 String                   @db.VarChar(255)
+  category             ProcurementCategory      @default(GOODS)
+  validFrom            DateTime                 @db.Date
+  validTo              DateTime                 @db.Date
+  maxValue             Decimal?                 @db.Decimal(20, 4)
+  currency             String                   @default("PKR") @db.VarChar(3)
+  status               FrameworkAgreementStatus @default(DRAFT)
+  signedByUserId       String?                  @db.VarChar(26)
+  signedOn             DateTime?                @db.Date
+  terminatedOn         DateTime?                @db.Date
+  terminatedReason     String?                  @db.Text
+  documentKey          String?                  @db.VarChar(500)
+  createdAt            DateTime                 @default(now()) @db.DateTime(6)
+  updatedAt            DateTime                 @updatedAt @db.DateTime(6)
+  version              Int                      @default(0)
+
+  firms      FrameworkAgreementFirm[]
+  callOffs   CallOffOrder[]
+
+  @@index([status, validTo])
+}
+
+model FrameworkAgreementFirm {
+  id                     String   @id @db.VarChar(26)
+  frameworkAgreementId   String   @db.VarChar(26)
+  firmId                 String   @db.VarChar(26)
+  pricingNotes           String?  @db.Text
+  createdAt              DateTime @default(now()) @db.DateTime(6)
+
+  framework FrameworkAgreement @relation(fields: [frameworkAgreementId], references: [id], onDelete: Cascade)
+
+  @@unique([frameworkAgreementId, firmId])
+  @@index([frameworkAgreementId])
+}
+
+enum CallOffStatus {
+  DRAFT
+  PLACED
+  FULFILLED
+  CANCELLED
+}
+
+model CallOffOrder {
+  id                   String        @id @db.VarChar(26)
+  frameworkAgreementId String        @db.VarChar(26)
+  firmId               String        @db.VarChar(26)
+  callOffNumber        String        @unique @db.VarChar(60)
+  description          String        @db.VarChar(500)
+  amount               Decimal       @db.Decimal(20, 4)
+  currency             String        @default("PKR") @db.VarChar(3)
+  placedOn             DateTime      @db.Date
+  fulfilledOn          DateTime?     @db.Date
+  status               CallOffStatus @default(PLACED)
+  cancelledOn          DateTime?     @db.Date
+  cancelledReason      String?       @db.Text
+  documentKey          String?       @db.VarChar(500)
+  createdAt            DateTime      @default(now()) @db.DateTime(6)
+  updatedAt            DateTime      @updatedAt @db.DateTime(6)
+
+  framework FrameworkAgreement @relation(fields: [frameworkAgreementId], references: [id])
+
+  @@index([frameworkAgreementId, placedOn])
+}
+
+// =============================================================================
+// Transparency + retention (PPRA Rules 46, 47, 50)
+//
+// Mis-procurement incidents, retention holds, and the "withholding approval"
+// marker for Rule 47's public-access carve-out.
+// =============================================================================
+
+enum MisprocurementSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MisprocurementStatus {
+  OPEN
+  REMEDIATED
+  REPORTED_TO_PPRA
+}
+
+model MisprocurementIncident {
+  id              String                  @id @db.VarChar(26)
+  indentId        String?                 @db.VarChar(26) // null when the incident is systemic (not case-level)
+  ruleReference   String                  @db.VarChar(80) // e.g. "PPRA Rule 12(2)"
+  summary         String                  @db.VarChar(500)
+  details         String                  @db.Text
+  severity        MisprocurementSeverity  @default(MEDIUM)
+  status          MisprocurementStatus    @default(OPEN)
+  detectedOn      DateTime                @db.Date
+  detectedByUserId String?                @db.VarChar(26)
+  remediatedOn    DateTime?               @db.Date
+  reportedToPPRAOn DateTime?              @db.Date
+  documentKey     String?                 @db.VarChar(500)
+  createdAt       DateTime                @default(now()) @db.DateTime(6)
+  updatedAt       DateTime                @updatedAt @db.DateTime(6)
+  version         Int                     @default(0)
+
+  @@index([indentId, status])
+  @@index([severity, status])
+}
+
+enum RetentionHoldReason {
+  LITIGATION
+  AUDIT_INQUIRY
+  INVESTIGATION
+  REGULATORY_HOLD
+  OTHER
+}
+
+model RetentionHold {
+  id             String              @id @db.VarChar(26)
+  subjectType    String              @db.VarChar(40) // "INDENT", "CONTRACT", "FIRM", etc.
+  subjectId      String              @db.VarChar(26)
+  reason         RetentionHoldReason
+  placedByUserId String              @db.VarChar(26)
+  placedOn       DateTime            @db.Date
+  releasedOn     DateTime?           @db.Date
+  releasedByUserId String?           @db.VarChar(26)
+  notes          String?             @db.Text
+  createdAt      DateTime            @default(now()) @db.DateTime(6)
+  updatedAt      DateTime            @updatedAt @db.DateTime(6)
+
+  @@index([subjectType, subjectId])
+  @@index([reason, releasedOn])
+}
+
+// =============================================================================
+// Annual Procurement Plan (PPRA Rule 8)
+//
+// Each fiscal year carries at most one PUBLISHED plan comprising line items
+// (planned procurements). An indent should ideally link to a plan line via
+// `plannedItemId`. The schema allows that link optionally so existing
+// indents remain valid.
+// =============================================================================
+
+enum AnnualPlanStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+model AnnualProcurementPlan {
+  id                 String                      @id @db.VarChar(26)
+  fiscalYearId       String                      @db.VarChar(26)
+  publishedOn        DateTime?                   @db.Date
+  publishedByUserId  String?                     @db.VarChar(26)
+  status             AnnualPlanStatus            @default(DRAFT)
+  totalEstimate      Decimal?                    @db.Decimal(20, 4)
+  currency           String                      @default("PKR") @db.VarChar(3)
+  notes              String?                     @db.Text
+  createdAt          DateTime                    @default(now()) @db.DateTime(6)
+  updatedAt          DateTime                    @updatedAt @db.DateTime(6)
+  version            Int                         @default(0)
+
+  fiscalYear FiscalYear               @relation(fields: [fiscalYearId], references: [id])
+  items      AnnualProcurementPlanItem[]
+
+  @@unique([fiscalYearId, status]) // at most one DRAFT, one PUBLISHED per FY
+  @@index([status])
+}
+
+model AnnualProcurementPlanItem {
+  id                 String                      @id @db.VarChar(26)
+  planId             String                      @db.VarChar(26)
+  budgetHeadId       String                      @db.VarChar(26)
+  description        String                      @db.VarChar(500)
+  estimatedValue     Decimal                     @db.Decimal(20, 4)
+  currency           String                      @default("PKR") @db.VarChar(3)
+  methodHint         ProcurementMethod?
+  categoryHint       ProcurementCategory?
+  quarterHint        String?                     @db.VarChar(2) // "Q1".."Q4"
+  createdAt          DateTime                    @default(now()) @db.DateTime(6)
+  updatedAt          DateTime                    @updatedAt @db.DateTime(6)
+
+  plan        AnnualProcurementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  budgetHead  BudgetHead            @relation(fields: [budgetHeadId], references: [id])
+  indents     Indent[]              @relation("PlanItemToIndent")
+
+  @@index([planId])
+  @@index([budgetHeadId])
+}
+
+// =============================================================================
+// Standard Bidding Documents (PPRA Rule 23(4))
+//
+// Rule 23(4): procuring agencies "shall use standard bidding documents" issued
+// by PPRA. A template library — each row is a versioned, kind-tagged document
+// (goods / works / services / consultancy). An IT proforma can be tagged with
+// a template id so compliance can bind.
+// =============================================================================
+
+enum BiddingDocumentKind {
+  GOODS
+  WORKS
+  SERVICES
+  CONSULTANCY
+}
+
+model BiddingDocumentTemplate {
+  id          String              @id @db.VarChar(26)
+  kind        BiddingDocumentKind
+  name        String              @db.VarChar(200)
+  revision    String              @db.VarChar(40) // "v1", "v2.1", "2026-01"
+  publishedOn DateTime            @db.Date
+  isActive    Boolean             @default(true)
+  bodyKey     String?             @db.VarChar(500) // object-store key for the template body
+  summary     String?             @db.Text
+  createdAt   DateTime            @default(now()) @db.DateTime(6)
+  updatedAt   DateTime            @updatedAt @db.DateTime(6)
+
+  @@unique([kind, revision])
+  @@index([kind, isActive])
+}
+
+// =============================================================================
+// Execution evidence models (DPP&I-35 Chapters XVII–XX)
+//
+// Four small evidence records attached to a signed Contract:
+//   - Insurance            (Ch XVII) — marine / war-risk cover on imports.
+//   - Shipment             (Ch XVIII) — approved freight-forwarder dispatch.
+//   - EndUserCertificate   (Ch XIX)  — EUC issued for controlled-goods imports.
+//   - AgentCommission      (Ch XX)   — disclosed commission paid to an agent.
+//
+// None of these mutates the Contract. They are append-only evidence rows the
+// compliance engine joins to the Contract/Indent for its reports.
+// =============================================================================
+
+enum InsuranceKind {
+  MARINE
+  WAR_RISK
+  TRANSIT
+  COMPREHENSIVE
+  OTHER
+}
+
+model Insurance {
+  id            String        @id @db.VarChar(26)
+  contractId    String        @db.VarChar(26)
+  kind          InsuranceKind
+  policyNumber  String        @db.VarChar(60)
+  insurer       String        @db.VarChar(255)
+  coverFromDate DateTime      @db.Date
+  coverToDate   DateTime      @db.Date
+  premium       Decimal       @db.Decimal(20, 4)
+  currency      String        @default("PKR") @db.VarChar(3)
+  documentKey   String?       @db.VarChar(500)
+  createdAt     DateTime      @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+enum ShipmentMode {
+  SEA
+  AIR
+  ROAD
+  RAIL
+  COURIER
+}
+
+model Shipment {
+  id                 String       @id @db.VarChar(26)
+  contractId         String       @db.VarChar(26)
+  invoiceId          String?      @db.VarChar(26) // link to the invoice it fulfils, if any
+  mode               ShipmentMode
+  blAwbNumber        String       @db.VarChar(80) // Bill-of-Lading or Airway-Bill number
+  dispatchedOn       DateTime     @db.Date
+  receivedOn         DateTime?    @db.Date
+  freightForwarder   String?      @db.VarChar(255)
+  originPort         String?      @db.VarChar(120)
+  destinationPort    String?      @db.VarChar(120)
+  documentKey        String?      @db.VarChar(500)
+  createdAt          DateTime     @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, dispatchedOn])
+}
+
+model EndUserCertificate {
+  id                     String   @id @db.VarChar(26)
+  contractId             String   @db.VarChar(26)
+  issuedOn               DateTime @db.Date
+  issuingAuthorityUserId String   @db.VarChar(26)
+  endUserOrganisation    String   @db.VarChar(255)
+  controlledGoodsDesc    String   @db.Text
+  documentKey            String?  @db.VarChar(500)
+  createdAt              DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+model AgentCommission {
+  id             String   @id @db.VarChar(26)
+  contractId     String   @db.VarChar(26)
+  agentName      String   @db.VarChar(255)
+  agentFirmId    String?  @db.VarChar(26)
+  percent        Decimal  @db.Decimal(6, 3) // e.g. 2.500 = 2.5%
+  amount         Decimal  @db.Decimal(20, 4)
+  currency       String   @default("PKR") @db.VarChar(3)
+  disclosedOn    DateTime @db.Date
+  approvedByUserId String? @db.VarChar(26)
+  approvedOn     DateTime? @db.Date
+  documentKey    String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+// =============================================================================
+// Committees (PPRA Rule 48 GRC + general TEC / FEC)
+//
+// A committee has a kind (GRC — grievance redressal; TEC — tender evaluation;
+// FEC — finance evaluation; OTHER), a term, and an ordered list of members.
+// The service layer enforces "odd-number members" for GRC bodies.
+// =============================================================================
+
+enum CommitteeKind {
+  GRC
+  TEC
+  FEC
+  INSPECTION
+  OTHER
+}
+
+model Committee {
+  id          String        @id @db.VarChar(26)
+  kind        CommitteeKind
+  name        String        @db.VarChar(200)
+  termStart   DateTime      @db.Date
+  termEnd     DateTime?     @db.Date
+  isActive    Boolean       @default(true)
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now()) @db.DateTime(6)
+  updatedAt   DateTime      @updatedAt @db.DateTime(6)
+  version     Int           @default(0)
+
+  members CommitteeMember[]
+
+  @@index([kind, isActive])
+}
+
+model CommitteeMember {
+  id            String    @id @db.VarChar(26)
+  committeeId   String    @db.VarChar(26)
+  userId        String    @db.VarChar(26) // User (civilian/military identity in the User table)
+  memberRole    String    @db.VarChar(80)  // "Chair", "Secretary", "Member", etc.
+  joinedOn      DateTime  @db.Date
+  leftOn        DateTime? @db.Date
+  createdAt     DateTime  @default(now()) @db.DateTime(6)
+
+  committee Committee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+
+  @@unique([committeeId, userId])
+  @@index([committeeId])
+}
+
+// =============================================================================
+// Contract amendments (DPP&I-35 Ch XXI)
+//
+// A formal amendment to a signed Contract — scope (QTY/DP/VALUE/SPEC/OTHER),
+// delta value where applicable, request + approval dates, approving authority,
+// reason, and the supporting document key.
+// =============================================================================
+
+enum ContractAmendmentScope {
+  QTY       // quantity change
+  DP        // delivery period change (companion to DeliveryPeriodExtension)
+  VALUE     // value change
+  SPEC      // technical specification change
+  OTHER
+}
+
+enum ContractAmendmentStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+}
+
+model ContractAmendment {
+  id                  String                  @id @db.VarChar(26)
+  contractId          String                  @db.VarChar(26)
+  scope               ContractAmendmentScope
+  summary             String                  @db.Text        // one-paragraph change description
+  deltaValue          Decimal?                @db.Decimal(20, 4) // signed; positive = add, negative = reduce
+  deltaCurrency       String?                 @db.VarChar(3)
+  requestedOn         DateTime                @db.Date
+  approvedOn          DateTime?               @db.Date
+  approvedByUserId    String?                 @db.VarChar(26)
+  status              ContractAmendmentStatus @default(PROPOSED)
+  rejectionReason     String?                 @db.Text
+  documentKey         String?                 @db.VarChar(500)
+  createdAt           DateTime                @default(now()) @db.DateTime(6)
+  updatedAt           DateTime                @updatedAt @db.DateTime(6)
+  version             Int                     @default(0)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, status])
+}
+
+// =============================================================================
+// Firm registration / pre-qualification (PPRA Rules 15–16; DPP&I-35 Ch XXVI)
+//
+// A firm must be registered with DP(Navy) for a defined set of categories
+// before it may be invited to an IT. Registration carries a validity window;
+// an expired registration is treated as "not registered" at IT-invite time.
+// Renewal creates a new row rather than mutating in place, so the history is
+// preserved for audit.
+// =============================================================================
+
+enum FirmRegistrationCategory {
+  GOODS
+  WORKS
+  SERVICES
+  ARMAMENT_AMMUNITION
+  ELECTRONICS
+  VEHICLES
+  MEDICAL
+  TEXTILES
+  AVIATION
+  SHIPBUILDING
+  IT_SOFTWARE
+  OTHER
+}
+
+enum FirmRegistrationStatus {
+  PENDING    // documents submitted, awaiting vetting
+  APPROVED   // lead agency has issued the certificate
+  REJECTED   // declined with reasons
+  EXPIRED    // validUntil passed
+  REVOKED    // cancelled before expiry
+}
+
+model FirmRegistration {
+  id              String                       @id @db.VarChar(26)
+  firmId          String                       @db.VarChar(26)
+  submittedOn     DateTime                     @db.Date
+  issuedOn        DateTime?                    @db.Date
+  validUntil      DateTime?                    @db.Date
+  category        FirmRegistrationCategory
+  status          FirmRegistrationStatus       @default(PENDING)
+  certificateKey  String?                      @db.VarChar(500) // object-store key for issued certificate
+  reviewedByUserId String?                     @db.VarChar(26)
+  reviewNotes     String?                      @db.Text
+  revokedOn       DateTime?                    @db.Date
+  revokedReason   String?                      @db.Text
+  createdAt       DateTime                     @default(now()) @db.DateTime(6)
+  updatedAt       DateTime                     @updatedAt @db.DateTime(6)
+  version         Int                          @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, category, status])
+  @@index([validUntil, status])
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  RESOLVED
+  WAIVED
+}
+
+model Discrepancy {
+  id              String             @id @db.VarChar(26)
+  inspectionId    String             @db.VarChar(26)
+  raisedOn        DateTime           @db.Date
+  description     String             @db.Text
+  severity        String             @db.VarChar(40) // MINOR/MAJOR/CRITICAL (open-ended for taxonomy evolution)
+  status          DiscrepancyStatus  @default(OPEN)
+  resolvedOn      DateTime?          @db.Date
+  resolutionNotes String?            @db.Text
+  createdAt       DateTime           @default(now()) @db.DateTime(6)
+  updatedAt       DateTime           @updatedAt @db.DateTime(6)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId, status])
 }

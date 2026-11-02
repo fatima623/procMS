@@ -16,6 +16,7 @@ import type { Clock } from '../ports/Clock';
 import type { IdFactory } from '../ports/IdFactory';
 import type { Logger } from '../ports/Logger';
 import type { UnitOfWork } from '../ports/UnitOfWork';
+import { compliancePolicy } from '@/infrastructure/compliance/CompliancePolicyService';
 
 export interface OpenCommercialOfferDto {
   readonly itPerformaId: string;
@@ -50,6 +51,9 @@ export class OpenCommercialOfferUseCase {
     if (!/^\d+$/.test(dto.totalPriceMinor)) {
       throw new ValidationError('Invalid totalPriceMinor', { totalPriceMinor: 'must be non-negative integer' });
     }
+
+    // PPRA Rule 19 — a blacklisted firm's bid must not be opened.
+    await compliancePolicy.assertFirmNotBlacklisted(dto.firmId, this.deps.clock.now());
 
     return this.deps.uow.run(async (h) => {
       const it = await h.itProformas.findById(dto.itPerformaId);
