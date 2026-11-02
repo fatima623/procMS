@@ -182,26 +182,44 @@ is wired into the service — ready to call from a future
 calls the assertion; today the field is set by hand on the admin create
 form for `Contract`.
 
-### B3. Insurance (DPP&I-35 Ch XVII) ❌
+### B3. Insurance (DPP&I-35 Ch XVII) ✅ *(2026-11-02)*
 Chapter XVII (pp. 128–132): for imports, marine + war risk insurance.
 
-**What to add.** `Insurance { contractId, policyNumber, coverFromDate, coverToDate, premiumMinor, currency }`.
+**Shipped.** `Insurance { contractId, kind (MARINE/WAR_RISK/TRANSIT/
+COMPREHENSIVE/OTHER), policyNumber, insurer, coverFromDate, coverToDate,
+premium, currency, documentKey }`. The service enforces coverTo > coverFrom
+and matching currency with the contract. UI at **/execution/insurances**
+with EXPIRED/ACTIVE pill derived at read time.
 
-### B4. Shipment of defence stores (DPP&I-35 Ch XVIII) ❌
+### B4. Shipment of defence stores (DPP&I-35 Ch XVIII) ✅ *(2026-11-02)*
 Chapter XVIII: approved freight forwarders, inspection pre-dispatch,
 Bill of Lading / Airway Bill.
 
-**What to add.** `Shipment { contractId, invoiceId, mode: SEA|AIR|ROAD, blAwbNumber, dispatchedOn, receivedOn, freightForwarderId }`.
+**Shipped.** `Shipment { contractId, invoiceId?, mode (SEA/AIR/ROAD/RAIL/
+COURIER), blAwbNumber, dispatchedOn, receivedOn, freightForwarder,
+originPort, destinationPort, documentKey }` plus "Mark received" action.
+The service enforces receivedOn ≥ dispatchedOn and that any linked invoice
+belongs to the same contract. UI at **/execution/shipments**.
 
-### B5. End User Certificate (DPP&I-35 Ch XIX) ❌
+### B5. End User Certificate (DPP&I-35 Ch XIX) ✅ *(2026-11-02)*
 Chapter XIX (pp. 145–147): EUC issued for imports of controlled goods.
 
-**What to add.** `EndUserCertificate { contractId, issuedOn, issuingAuthorityUserId, documentKey }`.
+**Shipped.** `EndUserCertificate { contractId, issuedOn,
+issuingAuthorityUserId, endUserOrganisation, controlledGoodsDesc,
+documentKey }`. Issuable only by DP(N) / DGDP / ADMIN. UI at
+**/execution/end-user-certificates**.
 
-### B6. Agent Commission policy (DPP&I-35 Ch XX) ❌
+### B6. Agent Commission policy (DPP&I-35 Ch XX) ✅ *(2026-11-02)*
 Chapter XX (pp. 148–151): agent commission disclosure and limits.
 
-**What to add.** `AgentCommission { contractId, agentFirmId, percent, amountMinor, approvedOn }`.
+**Shipped.** `AgentCommission { contractId, agentName, agentFirmId?,
+percent, amount, currency, disclosedOn, approvedOn, approvedByUserId,
+documentKey }`. Two-step: disclose then approve (DP(N)/DGDP/SECY_DP/
+ADMIN). Currency must match the contract. UI at **/execution/agent-commissions**.
+
+**Still to do.** Hard-cap on `percent` once a definitive rate is agreed
+with DP(N); DPP&I-35 does not fix the percentage so this is left policy-
+configurable rather than code-enforced.
 
 ### B7. Contract amendments (DPP&I-35 Ch XXI) ✅ *(2026-11-02)*
 Chapter XXI (pp. 152–156): formal amendments to quantity, DP, or value.

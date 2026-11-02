@@ -1,0 +1,80 @@
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+interface ContractRef { readonly id: string; readonly contractNumber: string; readonly firmName: string; readonly status: string; }
+
+export function EUCForm({ contracts }: { readonly contracts: readonly ContractRef[] }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [contractId, setContractId] = useState(contracts[0]?.id ?? '');
+  const [issuedOn, setIssuedOn] = useState(new Date().toISOString().slice(0, 10));
+  const [endUserOrganisation, setEndUserOrganisation] = useState('');
+  const [controlledGoodsDesc, setControlledGoodsDesc] = useState('');
+  const [documentKey, setDocumentKey] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch('/api/end-user-certificates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          contractId, issuedOn, endUserOrganisation, controlledGoodsDesc,
+          documentKey: documentKey || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      if (!res.ok) throw new Error(data?.error?.message ?? `HTTP ${res.status}`);
+      router.push('/execution/end-user-certificates');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  if (contracts.length === 0) {
+    return (
+      <div className="card" style={{ padding: 16 }}>
+        <p>No contracts available.</p>
+        <Link className="btn" href="/execution/contracts">← Back</Link>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="card" style={{ padding: 20, maxWidth: 720 }}>
+      {err && <div className="err" style={{ marginBottom: 12 }}>{err}</div>}
+      <div className="field">
+        <label htmlFor="contractId">Contract</label>
+        <select id="contractId" className="select" value={contractId} onChange={(e) => setContractId(e.target.value)}>
+          {contracts.map((c) => <option key={c.id} value={c.id}>{c.contractNumber} — {c.firmName}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="issuedOn">Issued on</label>
+        <input id="issuedOn" className="input" type="date" value={issuedOn} onChange={(e) => setIssuedOn(e.target.value)} required />
+      </div>
+      <div className="field">
+        <label htmlFor="endUserOrganisation">End-user organisation</label>
+        <input id="endUserOrganisation" className="input" value={endUserOrganisation} onChange={(e) => setEndUserOrganisation(e.target.value)} maxLength={255} required />
+      </div>
+      <div className="field">
+        <label htmlFor="controlledGoodsDesc">Controlled goods description</label>
+        <textarea id="controlledGoodsDesc" className="input" rows={4} minLength={5} maxLength={5000} value={controlledGoodsDesc} onChange={(e) => setControlledGoodsDesc(e.target.value)} required />
+      </div>
+      <div className="field">
+        <label htmlFor="documentKey">Signed EUC document key (optional)</label>
+        <input id="documentKey" className="input" value={documentKey} onChange={(e) => setDocumentKey(e.target.value)} maxLength={500} />
+      </div>
+      <div className="row row-end" style={{ marginTop: 16, gap: 8 }}>
+        <Link href="/execution/end-user-certificates" className="btn">Cancel</Link>
+        <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? '…' : 'Issue EUC'}</button>
+      </div>
+    </form>
+  );
+}

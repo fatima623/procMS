@@ -878,6 +878,10 @@ model Contract {
   liquidatedDamages LiquidatedDamages[]
   inspections       Inspection[]
   amendments        ContractAmendment[]
+  insurances        Insurance[]
+  shipments         Shipment[]
+  endUserCerts      EndUserCertificate[]
+  agentCommissions  AgentCommission[]
 
   @@index([firmId])
   @@index([status])
@@ -1148,6 +1152,106 @@ model Inspection {
   discrepancies Discrepancy[]
 
   @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Execution evidence models (DPP&I-35 Chapters XVII–XX)
+//
+// Four small evidence records attached to a signed Contract:
+//   - Insurance            (Ch XVII) — marine / war-risk cover on imports.
+//   - Shipment             (Ch XVIII) — approved freight-forwarder dispatch.
+//   - EndUserCertificate   (Ch XIX)  — EUC issued for controlled-goods imports.
+//   - AgentCommission      (Ch XX)   — disclosed commission paid to an agent.
+//
+// None of these mutates the Contract. They are append-only evidence rows the
+// compliance engine joins to the Contract/Indent for its reports.
+// =============================================================================
+
+enum InsuranceKind {
+  MARINE
+  WAR_RISK
+  TRANSIT
+  COMPREHENSIVE
+  OTHER
+}
+
+model Insurance {
+  id            String        @id @db.VarChar(26)
+  contractId    String        @db.VarChar(26)
+  kind          InsuranceKind
+  policyNumber  String        @db.VarChar(60)
+  insurer       String        @db.VarChar(255)
+  coverFromDate DateTime      @db.Date
+  coverToDate   DateTime      @db.Date
+  premium       Decimal       @db.Decimal(20, 4)
+  currency      String        @default("PKR") @db.VarChar(3)
+  documentKey   String?       @db.VarChar(500)
+  createdAt     DateTime      @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+enum ShipmentMode {
+  SEA
+  AIR
+  ROAD
+  RAIL
+  COURIER
+}
+
+model Shipment {
+  id                 String       @id @db.VarChar(26)
+  contractId         String       @db.VarChar(26)
+  invoiceId          String?      @db.VarChar(26) // link to the invoice it fulfils, if any
+  mode               ShipmentMode
+  blAwbNumber        String       @db.VarChar(80) // Bill-of-Lading or Airway-Bill number
+  dispatchedOn       DateTime     @db.Date
+  receivedOn         DateTime?    @db.Date
+  freightForwarder   String?      @db.VarChar(255)
+  originPort         String?      @db.VarChar(120)
+  destinationPort    String?      @db.VarChar(120)
+  documentKey        String?      @db.VarChar(500)
+  createdAt          DateTime     @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, dispatchedOn])
+}
+
+model EndUserCertificate {
+  id                     String   @id @db.VarChar(26)
+  contractId             String   @db.VarChar(26)
+  issuedOn               DateTime @db.Date
+  issuingAuthorityUserId String   @db.VarChar(26)
+  endUserOrganisation    String   @db.VarChar(255)
+  controlledGoodsDesc    String   @db.Text
+  documentKey            String?  @db.VarChar(500)
+  createdAt              DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+model AgentCommission {
+  id             String   @id @db.VarChar(26)
+  contractId     String   @db.VarChar(26)
+  agentName      String   @db.VarChar(255)
+  agentFirmId    String?  @db.VarChar(26)
+  percent        Decimal  @db.Decimal(6, 3) // e.g. 2.500 = 2.5%
+  amount         Decimal  @db.Decimal(20, 4)
+  currency       String   @default("PKR") @db.VarChar(3)
+  disclosedOn    DateTime @db.Date
+  approvedByUserId String? @db.VarChar(26)
+  approvedOn     DateTime? @db.Date
+  documentKey    String?  @db.VarChar(500)
+  createdAt      DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
 }
 
 // =============================================================================

@@ -18,7 +18,11 @@ const ICON = {
 
 export default async function ExecutionHubPage() {
   await requireRoles([Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF]);
-  const [adCount, contractCount, guaranteeCount, invoiceCount, paymentCount, lcCount, lcAmendCount, dpExtCount, ldCount, inspectionCount] = await Promise.all([
+  const [
+    adCount, contractCount, guaranteeCount, invoiceCount, paymentCount,
+    lcCount, lcAmendCount, dpExtCount, ldCount, inspectionCount,
+    insuranceCount, shipmentCount, eucCount, agentCommissionCount,
+  ] = await Promise.all([
     prisma.advertisement.count(),
     prisma.contract.count(),
     prisma.guarantee.count(),
@@ -29,6 +33,10 @@ export default async function ExecutionHubPage() {
     prisma.deliveryPeriodExtension.count(),
     prisma.liquidatedDamages.count(),
     prisma.inspection.count(),
+    prisma.insurance.count(),
+    prisma.shipment.count(),
+    prisma.endUserCertificate.count(),
+    prisma.agentCommission.count(),
   ]);
 
   const tiles: { href: string; label: string; count: number; icon: JSX.Element; sub: string }[] = [
@@ -42,6 +50,10 @@ export default async function ExecutionHubPage() {
     { href: '/execution/payments',            label: 'Payments',         count: paymentCount,    icon: ICON.wallet, sub: 'Payment releases' },
     { href: '/execution/lcs',                 label: 'Letters of Credit',count: lcCount,         icon: ICON.lc,     sub: 'Chapter XIV: imports' },
     { href: '/execution/lc-amendments',       label: 'LC amendments',    count: lcAmendCount,    icon: ICON.lc,     sub: 'LC extensions / changes' },
+    { href: '/execution/insurances',          label: 'Insurance',        count: insuranceCount,  icon: ICON.shield, sub: 'Chapter XVII — marine & war-risk' },
+    { href: '/execution/shipments',           label: 'Shipments',        count: shipmentCount,   icon: ICON.doc,    sub: 'Chapter XVIII — BL/AWB dispatch' },
+    { href: '/execution/end-user-certificates', label: 'End-User Certs', count: eucCount,        icon: ICON.doc,    sub: 'Chapter XIX — controlled imports' },
+    { href: '/execution/agent-commissions',   label: 'Agent commissions',count: agentCommissionCount, icon: ICON.wallet, sub: 'Chapter XX — disclosed commissions' },
   ];
 
   return (
