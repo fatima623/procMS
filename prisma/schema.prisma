@@ -229,6 +229,7 @@ model Firm {
   blacklists           Blacklist[]
   grievances           Grievance[]
   integrityPacts       IntegrityPact[]
+  registrations        FirmRegistration[]
 }
 
 // -----------------------------------------------------------------------------
@@ -1146,6 +1147,62 @@ model Inspection {
   discrepancies Discrepancy[]
 
   @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Firm registration / pre-qualification (PPRA Rules 15–16; DPP&I-35 Ch XXVI)
+//
+// A firm must be registered with DP(Navy) for a defined set of categories
+// before it may be invited to an IT. Registration carries a validity window;
+// an expired registration is treated as "not registered" at IT-invite time.
+// Renewal creates a new row rather than mutating in place, so the history is
+// preserved for audit.
+// =============================================================================
+
+enum FirmRegistrationCategory {
+  GOODS
+  WORKS
+  SERVICES
+  ARMAMENT_AMMUNITION
+  ELECTRONICS
+  VEHICLES
+  MEDICAL
+  TEXTILES
+  AVIATION
+  SHIPBUILDING
+  IT_SOFTWARE
+  OTHER
+}
+
+enum FirmRegistrationStatus {
+  PENDING    // documents submitted, awaiting vetting
+  APPROVED   // lead agency has issued the certificate
+  REJECTED   // declined with reasons
+  EXPIRED    // validUntil passed
+  REVOKED    // cancelled before expiry
+}
+
+model FirmRegistration {
+  id              String                       @id @db.VarChar(26)
+  firmId          String                       @db.VarChar(26)
+  submittedOn     DateTime                     @db.Date
+  issuedOn        DateTime?                    @db.Date
+  validUntil      DateTime?                    @db.Date
+  category        FirmRegistrationCategory
+  status          FirmRegistrationStatus       @default(PENDING)
+  certificateKey  String?                      @db.VarChar(500) // object-store key for issued certificate
+  reviewedByUserId String?                     @db.VarChar(26)
+  reviewNotes     String?                      @db.Text
+  revokedOn       DateTime?                    @db.Date
+  revokedReason   String?                      @db.Text
+  createdAt       DateTime                     @default(now()) @db.DateTime(6)
+  updatedAt       DateTime                     @updatedAt @db.DateTime(6)
+  version         Int                          @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, category, status])
+  @@index([validUntil, status])
 }
 
 enum DiscrepancyStatus {

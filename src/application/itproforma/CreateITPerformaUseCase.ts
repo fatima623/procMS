@@ -15,6 +15,7 @@ import type { Logger } from '../ports/Logger';
 import type { UnitOfWork } from '../ports/UnitOfWork';
 import type { CreateITPerformaDto } from '../indent/dto/CreateITPerformaDto';
 import { compliancePolicy } from '@/infrastructure/compliance/CompliancePolicyService';
+import { firmRegistrationService } from '@/infrastructure/registration/FirmRegistrationService';
 
 export interface CreateITPerformaResult {
   readonly itPerformaId: string;
@@ -42,10 +43,14 @@ export class CreateITPerformaUseCase {
 
     const log = this.deps.logger.child({ useCase: 'CreateITPerforma', userId: ctx.userId });
 
-    // PPRA Rule 19 — refuse the IT proforma if any invited firm is blacklisted today.
+    // PPRA Rule 19 + Rules 15-16 — refuse the IT proforma if any invited firm
+    // is blacklisted today OR has no APPROVED, non-revoked, in-validity
+    // registration (any category — the IT itself doesn't yet carry a mandatory
+    // category binding; wire category once Indent.category is used here).
     const now = this.deps.clock.now();
     for (const firmId of dto.invitedFirmIds) {
       await compliancePolicy.assertFirmNotBlacklisted(firmId, now);
+      await firmRegistrationService.assertFirmPreQualified(firmId, null, now);
     }
 
     return this.deps.uow.run(async (h) => {

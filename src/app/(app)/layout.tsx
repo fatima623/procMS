@@ -41,6 +41,7 @@ const NAV: NavItem[] = [
   { href: '/prs',                label: 'Purchase Requisitions', icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
   { href: '/execution',          label: 'Execution',             icon: NAV_ICON.book,      show: SHOW_WORKFLOW },
   { href: '/compliance',         label: 'Compliance',            icon: NAV_ICON.shield,    show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) || r.includes(Role.ADP_STAFF) || r.includes(Role.COORD_STAFF) },
+  { href: '/registration',       label: 'Pre-qualification',     icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
   { href: '/firm/invites',       label: 'IT invites',            icon: NAV_ICON.mail,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/queries',       label: 'Firm queries',          icon: NAV_ICON.chat,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/prs',           label: 'Firm PRs',              icon: NAV_ICON.doc,       show: (r, f) => !!f || r.includes(Role.ADMIN) },
