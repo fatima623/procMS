@@ -27,13 +27,16 @@ export async function register(): Promise<void> {
   const { NodeSDK } = await import('@opentelemetry/sdk-node');
   const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
   const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');
-  const { Resource } = await import('@opentelemetry/resources');
-  const { SemanticResourceAttributes } = await import('@opentelemetry/semantic-conventions');
+  // OTEL v2+: `Resource` is a type; the runtime factory is `resourceFromAttributes`.
+  // `SemanticResourceAttributes` was removed in favour of `ATTR_*` constants /
+  // plain attribute keys.
+  const { resourceFromAttributes } = await import('@opentelemetry/resources');
+  const { ATTR_SERVICE_NAME } = await import('@opentelemetry/semantic-conventions');
 
   const sdk = new NodeSDK({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'procurement-api',
-      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV ?? 'development',
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME ?? 'procurement-api',
+      'deployment.environment': process.env.NODE_ENV ?? 'development',
     }),
     traceExporter: new OTLPTraceExporter({ url: endpoint.replace(/\/+$/, '') + '/v1/traces' }),
     instrumentations: [

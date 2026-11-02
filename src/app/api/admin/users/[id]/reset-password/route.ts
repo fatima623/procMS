@@ -12,12 +12,13 @@ export const dynamic = 'force-dynamic';
 
 const service = new AdminUserService();
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN]);
     const body = resetPasswordSchema.parse(await req.json());
-    await service.resetPassword(ctx, params.id, body.password);
+    await service.resetPassword(ctx, id, body.password);
     return NextResponse.json({ data: { ok: true } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
   } catch (err) {
     return toHttpResponse(err, requestId);

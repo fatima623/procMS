@@ -4,7 +4,7 @@ const indentItemSchema = z.object({
   lineNo: z.number().int().min(1),
   itemCode: z.string().max(80).optional(),
   description: z.string().min(1).max(1000),
-  specifications: z.record(z.unknown()).optional(),
+  specifications: z.record(z.string(), z.unknown()).optional(),
   quantity: z.number().positive(),
   uom: z.string().min(1).max(20),
   estimatedUnitPriceMinor: z.string().regex(/^\d+$/, 'must be a non-negative integer string'),

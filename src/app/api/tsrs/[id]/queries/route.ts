@@ -9,12 +9,13 @@ import { raiseQuerySchema } from '@/interfaces/http/schemas/tsr';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req);
     const body = raiseQuerySchema.parse(await req.json());
-    const result = await getContainer().raiseQuery.execute(ctx, params.id, body);
+    const result = await getContainer().raiseQuery.execute(ctx, id, body);
     return NextResponse.json(
       { data: result },
       { status: 201, headers: { [REQUEST_ID_HEADER]: requestId } },

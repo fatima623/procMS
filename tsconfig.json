@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "es2022"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "es2022"
+    ],
     "module": "esnext",
     "moduleResolution": "bundler",
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "allowJs": false,
     "strict": true,
     "noImplicitOverride": true,
@@ -17,14 +21,30 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": false,
     "noEmit": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
-      "@/domain/*": ["./src/domain/*"],
-      "@/application/*": ["./src/application/*"],
-      "@/infrastructure/*": ["./src/infrastructure/*"],
-      "@/interfaces/*": ["./src/interfaces/*"],
-      "@/config/*": ["./src/config/*"],
-      "@/app/*": ["./src/app/*"]
+      "@/domain/*": [
+        "./src/domain/*"
+      ],
+      "@/application/*": [
+        "./src/application/*"
+      ],
+      "@/infrastructure/*": [
+        "./src/infrastructure/*"
+      ],
+      "@/interfaces/*": [
+        "./src/interfaces/*"
+      ],
+      "@/config/*": [
+        "./src/config/*"
+      ],
+      "@/app/*": [
+        "./src/app/*"
+      ]
     }
   },
   "include": [
@@ -34,7 +54,8 @@
     "tests/**/*.ts",
     "prisma/**/*.ts",
     ".next/types/**/*.ts",
-    "instrumentation.ts"
+    "instrumentation.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

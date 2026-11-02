@@ -15,10 +15,11 @@ export const dynamic = 'force-dynamic';
  * user beyond their displayName. Returns 404 when no Contract exists
  * (either the award has not happened, or the indent is a fiction).
  */
-export async function GET(req: NextRequest, { params }: { params: { indentId: string } }): Promise<NextResponse> {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ indentId: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
-    const data = await publicAward.getAwardSummary(params.indentId);
+    const { indentId } = await params;
+    const data = await publicAward.getAwardSummary(indentId);
     if (!data) {
       return NextResponse.json({ error: { message: 'No award on record for that indent' } }, { status: 404, headers: { [REQUEST_ID_HEADER]: requestId } });
     }

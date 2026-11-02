@@ -15,15 +15,16 @@ export const dynamic = 'force-dynamic';
  * Lives as an admin-only auxiliary endpoint; the CommercialOffer domain
  * aggregate does not need to know about it (no state transition).
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     await requireAuth(req, [Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF]);
     const body = setBidValiditySchema.parse(await req.json());
-    const row = await prisma.commercialOffer.findUnique({ where: { id: params.id }, select: { id: true } });
-    if (!row) throw new NotFoundError('CommercialOffer', params.id);
-    await prisma.commercialOffer.update({ where: { id: params.id }, data: { bidValidUntil: body.bidValidUntil } });
-    return NextResponse.json({ data: { id: params.id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
+    const row = await prisma.commercialOffer.findUnique({ where: { id: id }, select: { id: true } });
+    if (!row) throw new NotFoundError('CommercialOffer', id);
+    await prisma.commercialOffer.update({ where: { id: id }, data: { bidValidUntil: body.bidValidUntil } });
+    return NextResponse.json({ data: { id: id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
   } catch (err) {
     return toHttpResponse(err, requestId);
   }

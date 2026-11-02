@@ -13,13 +13,14 @@ export const dynamic = 'force-dynamic';
  * DPP&I-35 Ch XVI — issue the Taking-Over Certificate for a contract.
  * Refused by the service when any open discrepancy remains.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     await requireAuth(req, [Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF, Role.INSPECTORATE]);
     const body = issueTakingOverSchema.parse(await req.json());
-    await executionObligations.issueTakingOverCertificate(params.id, body.certifiedOn);
-    return NextResponse.json({ data: { id: params.id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
+    await executionObligations.issueTakingOverCertificate(id, body.certifiedOn);
+    return NextResponse.json({ data: { id: id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
   } catch (err) {
     return toHttpResponse(err, requestId);
   }

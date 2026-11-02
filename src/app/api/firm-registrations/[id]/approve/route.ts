@@ -9,13 +9,14 @@ import { firmRegistrationService } from '@/infrastructure/registration/FirmRegis
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN, Role.COORD_STAFF, Role.ADP_STAFF]);
     const body = approveFirmRegistrationSchema.parse(await req.json());
-    await firmRegistrationService.approve(params.id, ctx.userId, body);
-    return NextResponse.json({ data: { id: params.id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
+    await firmRegistrationService.approve(id, ctx.userId, body);
+    return NextResponse.json({ data: { id: id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
   } catch (err) {
     return toHttpResponse(err, requestId);
   }

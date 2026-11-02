@@ -8,12 +8,13 @@ import { postCommentSchema } from '@/interfaces/http/schemas/comment';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req);
     const body = postCommentSchema.parse(await req.json());
-    const data = await commentService.post(ctx, { indentId: params.id, ...body });
+    const data = await commentService.post(ctx, { indentId: id, ...body });
     return NextResponse.json({ data }, { status: 201, headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }

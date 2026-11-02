@@ -9,11 +9,12 @@ import { REQUEST_ID_HEADER, requestIdOf } from '@/interfaces/http/requestId';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.FIRM_REP, Role.ADMIN]);
-    await getContainer().acknowledgePR.execute(ctx, params.id);
+    await getContainer().acknowledgePR.execute(ctx, id);
     return NextResponse.json(
       { data: { ok: true } },
       { status: 200, headers: { [REQUEST_ID_HEADER]: requestId } },

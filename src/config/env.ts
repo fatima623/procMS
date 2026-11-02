@@ -70,15 +70,47 @@ if (typeof process.env.DATABASE_URL === 'string') {
   if (fixed !== original) process.env.DATABASE_URL = fixed;
 }
 
+/**
+ * During `next build` (phase-production-build), Next.js imports every route
+ * handler to collect metadata. The handlers chain through to this module. If
+ * the build host doesn't have DATABASE_URL / NEXTAUTH_SECRET set (CI, Docker
+ * image bake, Vercel preview without secrets), the strict parse would abort
+ * the whole build even though no handler runs at build time. In that phase
+ * we fall back to permissive placeholders — never shipped to runtime because
+ * runtime re-reads process.env, where the real values are set.
+ */
+const isBuildPhase =
+  process.env.NEXT_PHASE === 'phase-production-build' ||
+  process.env.NEXT_PHASE === 'phase-export';
+
 const parsed = schema.safeParse(process.env);
-if (!parsed.success) {
-  // Formatted enough to be read in a terminal; no secrets echoed back.
+let raw: RawEnv;
+if (parsed.success) {
+  raw = parsed.data;
+} else if (isBuildPhase) {
+  // eslint-disable-next-line no-console
+  console.warn('[env] Build-phase placeholder values in use (real env vars will be read at runtime).');
+  raw = {
+    NODE_ENV: (process.env.NODE_ENV as 'development' | 'test' | 'production' | undefined) ?? 'production',
+    DATABASE_URL: process.env.DATABASE_URL ?? 'mysql://user:pass@localhost:3306/build_placeholder',
+    DIRECT_URL: undefined,
+    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? 'build_phase_placeholder_secret_32_chars__',
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? 'http://localhost:3000',
+    LOG_LEVEL: 'info',
+    ALLOWED_ORIGINS: '',
+    OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+    OTEL_SERVICE_NAME: 'procurement-api',
+    OIDC_ISSUER: undefined,
+    OIDC_CLIENT_ID: undefined,
+    OIDC_CLIENT_SECRET: undefined,
+    OIDC_PROVIDER_NAME: undefined,
+    DIGEST_RECIPIENTS: undefined,
+  };
+} else {
   // eslint-disable-next-line no-console
   console.error('Invalid environment configuration:', parsed.error.flatten().fieldErrors);
   throw new Error('Invalid environment configuration');
 }
-
-const raw = parsed.data;
 
 export const env: Env = {
   ...raw,

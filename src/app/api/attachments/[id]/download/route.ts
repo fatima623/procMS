@@ -11,12 +11,13 @@ export const dynamic = 'force-dynamic';
 
 const storage = LocalFsAttachmentStorage.default();
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse | Response> {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse | Response> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     await requireAuth(req);
-    const row = await prisma.attachment.findUnique({ where: { id: params.id } });
-    if (!row) throw new NotFoundError('Attachment', params.id);
+    const row = await prisma.attachment.findUnique({ where: { id: id } });
+    if (!row) throw new NotFoundError('Attachment', id);
 
     const bytes = await storage.get(row.storageKey);
     return new Response(bytes, {

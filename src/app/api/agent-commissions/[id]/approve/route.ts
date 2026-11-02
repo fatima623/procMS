@@ -9,13 +9,14 @@ import { executionEvidence } from '@/infrastructure/execution/ExecutionEvidenceS
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN, Role.DP_N, Role.DGDP, Role.SECY_DP]);
     const body = approveAgentCommissionSchema.parse(await req.json());
-    await executionEvidence.approveAgentCommission(params.id, ctx.userId, body);
-    return NextResponse.json({ data: { id: params.id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
+    await executionEvidence.approveAgentCommission(id, ctx.userId, body);
+    return NextResponse.json({ data: { id: id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
   } catch (err) {
     return toHttpResponse(err, requestId);
   }

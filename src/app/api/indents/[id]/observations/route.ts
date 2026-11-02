@@ -10,12 +10,13 @@ import { raiseObservationSchema } from '@/interfaces/http/schemas/observation';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADP_STAFF, Role.ADMIN]);
     const body = raiseObservationSchema.parse(await req.json());
-    const result = await getContainer().raiseObservation.execute(ctx, params.id, body);
+    const result = await getContainer().raiseObservation.execute(ctx, id, body);
     return NextResponse.json(
       { data: result },
       { status: 201, headers: { [REQUEST_ID_HEADER]: requestId } },

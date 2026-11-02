@@ -17,32 +17,33 @@ export const dynamic = 'force-dynamic';
  * writes happen in the same transaction. Pass `openRiskPurchaseCase: false`
  * to terminate without a risk-purchase case (unusual).
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN, Role.DP_N, Role.DGDP, Role.SECY_DP]);
     const body = terminateContractSchema.parse(await req.json());
 
     const result = await prisma.$transaction(async (tx) => {
-      const contract = await tx.contract.findUnique({ where: { id: params.id }, select: { id: true, status: true } });
-      if (!contract) throw new NotFoundError('Contract', params.id);
+      const contract = await tx.contract.findUnique({ where: { id: id }, select: { id: true, status: true } });
+      if (!contract) throw new NotFoundError('Contract', id);
       if (contract.status === 'TERMINATED') {
         throw new ValidationError('Contract is already TERMINATED');
       }
       if (contract.status === 'CLOSED') {
         throw new ValidationError('A CLOSED contract cannot be terminated');
       }
-      await tx.contract.update({ where: { id: params.id }, data: { status: 'TERMINATED' } });
+      await tx.contract.update({ where: { id: id }, data: { status: 'TERMINATED' } });
 
       let riskPurchaseId: string | null = null;
       if (body.openRiskPurchaseCase) {
-        const existing = await tx.riskPurchaseCase.findUnique({ where: { originalContractId: params.id }, select: { id: true } });
+        const existing = await tx.riskPurchaseCase.findUnique({ where: { originalContractId: id }, select: { id: true } });
         if (!existing) {
           const id = ulid();
           await tx.riskPurchaseCase.create({
             data: {
               id,
-              originalContractId: params.id,
+              originalContractId: id,
               triggerReason: body.terminationReason,
               initiatedOn: body.initiatedOn,
               initiatedByUserId: ctx.userId,
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           riskPurchaseId = existing.id;
         }
       }
-      return { contractId: params.id, riskPurchaseId };
+      return { contractId: id, riskPurchaseId };
     });
 
     return NextResponse.json({ data: result }, { headers: { [REQUEST_ID_HEADER]: requestId } });

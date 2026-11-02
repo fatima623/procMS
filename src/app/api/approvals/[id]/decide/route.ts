@@ -17,12 +17,13 @@ export const dynamic = 'force-dynamic';
  * The current step's required role is checked inside the use-case against the
  * authenticated principal.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const requestId = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req);
     const body = decideApprovalSchema.parse(await req.json());
-    await getContainer().actOnApproval.execute(ctx, params.id, body);
+    await getContainer().actOnApproval.execute(ctx, id, body);
     return NextResponse.json(
       { data: { ok: true } },
       { status: 200, headers: { [REQUEST_ID_HEADER]: requestId } },

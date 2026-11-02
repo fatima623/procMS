@@ -10,21 +10,23 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const service = new AdminBudgetHeadService();
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN]);
-    const data = await service.get(ctx, params.id);
+    const data = await service.get(ctx, id);
     return NextResponse.json({ data }, { headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
-    const ctx = await requireAuth(req, [Role.ADMIN]);
+    const { id } = await params;
+        const ctx = await requireAuth(req, [Role.ADMIN]);
     const body = upsertBudgetHeadSchema.partial().parse(await req.json());
-    const data = await service.update(ctx, params.id, body);
+    const data = await service.update(ctx, id, body);
     return NextResponse.json({ data }, { headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }

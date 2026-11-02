@@ -15,21 +15,23 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req, [Role.ADMIN]);
     const body = updateSchema.parse(await req.json());
-    const data = await digestRecipientService.update(ctx, params.id, { ...body, label: body.label ?? undefined });
+    const data = await digestRecipientService.update(ctx, id, { ...body, label: body.label ?? undefined });
     return NextResponse.json({ data }, { headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
-    const ctx = await requireAuth(req, [Role.ADMIN]);
-    await digestRecipientService.delete(ctx, params.id);
+    const { id } = await params;
+        const ctx = await requireAuth(req, [Role.ADMIN]);
+    await digestRecipientService.delete(ctx, id);
     return NextResponse.json({ data: { ok: true } }, { headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }

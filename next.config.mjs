@@ -12,10 +12,8 @@ const nextConfig = {
     '@opentelemetry/auto-instrumentations-node',
     '@opentelemetry/exporter-trace-otlp-http',
   ],
-  experimental: {
-    // Required in Next 14 to boot `instrumentation.ts`. (Default in Next 15+.)
-    instrumentationHook: true,
-  },
+  // `instrumentation.ts` boots automatically on Next 15+; the old
+  // `experimental.instrumentationHook` option has been removed.
   // Harden the response headers for every route by default. Per-route
   // overrides can relax this in interfaces/http/middleware.
   async headers() {

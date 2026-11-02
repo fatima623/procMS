@@ -7,11 +7,12 @@ import { notificationService } from '@/application/notification/NotificationServ
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const rid = requestIdOf(req);
   try {
+    const { id } = await params;
     const ctx = await requireAuth(req);
-    await notificationService.markRead(ctx, params.id);
+    await notificationService.markRead(ctx, id);
     return NextResponse.json({ data: { ok: true } }, { headers: { [REQUEST_ID_HEADER]: rid } });
   } catch (err) { return toHttpResponse(err, rid); }
 }
