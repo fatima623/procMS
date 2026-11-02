@@ -46,6 +46,7 @@ const NAV: NavItem[] = [
   { href: '/planning',           label: 'Planning',              icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) || r.includes(Role.COORD_STAFF) },
   { href: '/transparency',       label: 'Transparency',          icon: NAV_ICON.shield,    show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.DP_N) },
   { href: '/frameworks',         label: 'Frameworks',            icon: NAV_ICON.doc,       show: SHOW_WORKFLOW },
+  { href: '/special',            label: 'Special cases',         icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) || r.includes(Role.DP_N) || r.includes(Role.DGDP) || r.includes(Role.SECY_DP) || r.includes(Role.ADP_STAFF) || r.includes(Role.COORD_STAFF) },
   { href: '/firm/invites',       label: 'IT invites',            icon: NAV_ICON.mail,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/queries',       label: 'Firm queries',          icon: NAV_ICON.chat,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/prs',           label: 'Firm PRs',              icon: NAV_ICON.doc,       show: (r, f) => !!f || r.includes(Role.ADMIN) },

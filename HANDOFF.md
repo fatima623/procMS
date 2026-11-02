@@ -149,6 +149,9 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
     tables (PPRA Rules 46, 50).
   - `20261102280000_add_risk_purchase_framework` — RiskPurchaseCase, FrameworkAgreement,
     FrameworkAgreementFirm, CallOffOrder tables (DPP&I-35 Chapters XXII, XXIII; PPRA Rule 16A).
+  - `20261102300000_add_fms_disposal_appeals` — FMSCase, DisposalCase, DisposalLot,
+    Appeal tables + back-relations on Indent (`fmsCase`) and Grievance (`appeal`)
+    (DPP&I-35 Chapters XXIV, XXV, XXVIII; PPRA Rule 50 tier-2).
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is

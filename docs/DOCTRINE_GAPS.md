@@ -307,21 +307,43 @@ and **/frameworks/call-offs**.
 validTo passes. Linking Indent.plannedItemId or Contract to a
 call-off order for traceability.
 
-### B10. Foreign Military Sales (DPP&I-35 Ch XXIV) ❌
+### B10. Foreign Military Sales (DPP&I-35 Ch XXIV) ✅ *(2026-11-02)*
 Chapter XXIV (pp. 170–178): government-to-government procurement under FMS.
 
-**What to add.** A separate indent flavour `IndentKind=FMS` with its own
-approval chain and no commercial-offer stage.
+**Shipped.** `FMSCase { indentId (unique), caseNumber (unique),
+foreignAuthority, lorSubmittedOn, loaReceivedOn, loaAcceptedOn,
+loaValue, currency (default USD), deliveryExpectedBy,
+deliveryCompletedOn, status (LOR_SUBMITTED → LOA_RECEIVED → LOA_ACCEPTED
+→ IN_IMPLEMENTATION → CLOSED | CANCELLED), closedOn, cancelledReason,
+notes, documentKey, version }`. Lifecycle: open LOR → record LOA →
+accept LOA → enter implementation → complete delivery → close.
+UI at **/special/fms** with per-row Record LOA / Accept / Implement /
+Delivery done / Close inline actions.
 
-### B11. Disposal of surplus defence stores (DPP&I-35 Ch XXV) ❌
-Chapter XXV (pp. 179–203): a parallel workflow for scrap sales.
+### B11. Disposal of surplus defence stores (DPP&I-35 Ch XXV) ✅ *(2026-11-02)*
+Chapter XXV (pp. 179–203): parallel workflow for scrap sales.
 
-**What to add.** `DisposalCase { kind: AUCTION|TENDER, lots[], receivedBids[], awardedOn, saleProceedsMinor }`. 
+**Shipped.** `DisposalCase { reference (unique), kind (AUCTION/TENDER/
+SCRAP_SALE/TRANSFER), description, initiatedOn, bidOpensOn,
+bidClosesOn, awardedOn, completedOn, status (PLANNED → OPEN_FOR_BIDS
+→ AWARDED → COMPLETED | CANCELLED), totalProceeds, currency, …,
+version }` with `DisposalLot { caseId, lotNumber, description,
+reservePrice, winningBid, winningBidderName, awardedOn }`.
+Award-lot auto-promotes the case to AWARDED once every lot has a
+winning bid. UI at **/special/disposals** with per-case inline
+actions + per-lot "Award lot".
 
-### B12. Appeals (DPP&I-35 Ch XXVIII; PPRA Rule 50) ❌
-Chapter XXVIII (pp. 248–252): the two-tier appeals mechanism beyond the GRC.
+### B12. Appeals (DPP&I-35 Ch XXVIII; PPRA Rule 50) ✅ *(2026-11-02)*
+Chapter XXVIII (pp. 248–252): the two-tier appeals mechanism beyond
+the GRC.
 
-**What to add.** `Appeal { grievanceId, appealedOn, decidedOn, outcome }`.
+**Shipped.** `Appeal { grievanceId (unique — one appeal per
+grievance), filedOn, filedByUserId, basis, status (PENDING / UPHELD /
+REJECTED / WITHDRAWN), decidedOn, decisionText, documentKey, version }`.
+Filing an appeal returns the parent grievance to APPEALED (so the
+pre-award guard in `IssuePRUseCase` still refuses the award).
+Deciding the appeal flips the grievance back to the matching terminal
+state (UPHELD / REJECTED). UI at **/special/appeals**.
 
 ### B13. Record retention (PPRA Rule 46) ✅ *(2026-11-02)*
 Rule 46: minimum five-year retention of procurement proceedings.

@@ -343,6 +343,7 @@ model Indent {
   contract       Contract?
   grievances     Grievance[]
   integrityPacts IntegrityPact[]
+  fmsCase        FMSCase?
 
   @@index([status])
   @@index([sectionId])
@@ -1074,8 +1075,9 @@ model Grievance {
   updatedAt         DateTime        @updatedAt @db.DateTime(6)
   version           Int             @default(0)
 
-  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
-  firm   Firm?  @relation(fields: [firmId], references: [id])
+  indent Indent  @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  firm   Firm?   @relation(fields: [firmId], references: [id])
+  appeal Appeal?
 
   @@index([indentId, status])
   @@index([status, filedOn])
@@ -1157,6 +1159,152 @@ model Inspection {
   discrepancies Discrepancy[]
 
   @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Foreign Military Sales (DPP&I-35 Ch XXIV)
+//
+// A government-to-government procurement under the FMS programme. The case
+// is anchored to an Indent (so budgeting + approvals use the normal chain)
+// but the IT / commercial-offer stage is bypassed — the procurement goes to
+// the Foreign Military Sales authority directly through a Letter of Request
+// (LOR) → Letter of Offer and Acceptance (LOA) → signature → delivery.
+// =============================================================================
+
+enum FMSStatus {
+  LOR_SUBMITTED       // LOR sent to the foreign authority
+  LOA_RECEIVED        // Letter of Offer and Acceptance received
+  LOA_ACCEPTED        // signed by the purchaser
+  IN_IMPLEMENTATION
+  CLOSED
+  CANCELLED
+}
+
+model FMSCase {
+  id                     String    @id @db.VarChar(26)
+  indentId               String    @unique @db.VarChar(26)
+  caseNumber             String    @unique @db.VarChar(60)
+  foreignAuthority       String    @db.VarChar(255) // "US DSCA", "UK DESO", etc.
+  lorSubmittedOn         DateTime? @db.Date
+  loaReceivedOn          DateTime? @db.Date
+  loaAcceptedOn          DateTime? @db.Date
+  loaValue               Decimal?  @db.Decimal(20, 4)
+  currency               String    @default("USD") @db.VarChar(3)
+  deliveryExpectedBy     DateTime? @db.Date
+  deliveryCompletedOn    DateTime? @db.Date
+  status                 FMSStatus @default(LOR_SUBMITTED)
+  closedOn               DateTime? @db.Date
+  cancelledReason        String?   @db.Text
+  notes                  String?   @db.Text
+  documentKey            String?   @db.VarChar(500)
+  createdAt              DateTime  @default(now()) @db.DateTime(6)
+  updatedAt              DateTime  @updatedAt @db.DateTime(6)
+  version                Int       @default(0)
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+// =============================================================================
+// Disposal of surplus defence stores (DPP&I-35 Ch XXV)
+//
+// Parallel workflow (not part of the pre-award / post-award chain). Surplus
+// stores are disposed of via AUCTION or TENDER; one DisposalCase can have
+// many lots, each receiving bids and a winning bid.
+// =============================================================================
+
+enum DisposalKind {
+  AUCTION
+  TENDER
+  SCRAP_SALE
+  TRANSFER
+}
+
+enum DisposalStatus {
+  PLANNED
+  OPEN_FOR_BIDS
+  AWARDED
+  COMPLETED
+  CANCELLED
+}
+
+model DisposalCase {
+  id              String         @id @db.VarChar(26)
+  reference       String         @unique @db.VarChar(60)
+  kind            DisposalKind
+  description     String         @db.VarChar(500)
+  initiatedOn    DateTime        @db.Date
+  bidOpensOn      DateTime?      @db.Date
+  bidClosesOn     DateTime?      @db.Date
+  awardedOn       DateTime?      @db.Date
+  completedOn    DateTime?       @db.Date
+  status          DisposalStatus @default(PLANNED)
+  totalProceeds   Decimal?       @db.Decimal(20, 4)
+  currency        String         @default("PKR") @db.VarChar(3)
+  cancelledReason String?        @db.Text
+  documentKey     String?        @db.VarChar(500)
+  createdAt       DateTime       @default(now()) @db.DateTime(6)
+  updatedAt       DateTime       @updatedAt @db.DateTime(6)
+  version         Int            @default(0)
+
+  lots DisposalLot[]
+
+  @@index([status, bidClosesOn])
+}
+
+model DisposalLot {
+  id             String   @id @db.VarChar(26)
+  caseId         String   @db.VarChar(26)
+  lotNumber      Int
+  description    String   @db.VarChar(500)
+  reservePrice   Decimal? @db.Decimal(20, 4)
+  currency       String   @default("PKR") @db.VarChar(3)
+  winningBid     Decimal? @db.Decimal(20, 4)
+  winningBidderName String? @db.VarChar(255)
+  winningBidderFirmId String? @db.VarChar(26)
+  awardedOn      DateTime? @db.Date
+  createdAt      DateTime @default(now()) @db.DateTime(6)
+  updatedAt      DateTime @updatedAt @db.DateTime(6)
+
+  case DisposalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, lotNumber])
+  @@index([caseId])
+}
+
+// =============================================================================
+// Appeals (second-tier beyond the GRC — PPRA Rule 50; DPP&I-35 Ch XXVIII)
+//
+// A bidder dissatisfied with a GRC decision may appeal to the Authority.
+// This model records the appeal lifecycle, cross-linking to the originating
+// Grievance.
+// =============================================================================
+
+enum AppealStatus {
+  PENDING
+  UPHELD
+  REJECTED
+  WITHDRAWN
+}
+
+model Appeal {
+  id             String       @id @db.VarChar(26)
+  grievanceId    String       @unique @db.VarChar(26) // one appeal per grievance
+  filedOn        DateTime     @db.Date
+  filedByUserId  String?      @db.VarChar(26)
+  basis          String       @db.Text
+  status         AppealStatus @default(PENDING)
+  decidedOn      DateTime?    @db.Date
+  decisionText   String?      @db.Text
+  documentKey    String?      @db.VarChar(500)
+  createdAt      DateTime     @default(now()) @db.DateTime(6)
+  updatedAt      DateTime     @updatedAt @db.DateTime(6)
+  version        Int          @default(0)
+
+  grievance Grievance @relation(fields: [grievanceId], references: [id], onDelete: Cascade)
+
+  @@index([status, filedOn])
 }
 
 // =============================================================================
