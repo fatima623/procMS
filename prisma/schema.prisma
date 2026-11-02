@@ -1160,6 +1160,72 @@ model Inspection {
 }
 
 // =============================================================================
+// Transparency + retention (PPRA Rules 46, 47, 50)
+//
+// Mis-procurement incidents, retention holds, and the "withholding approval"
+// marker for Rule 47's public-access carve-out.
+// =============================================================================
+
+enum MisprocurementSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MisprocurementStatus {
+  OPEN
+  REMEDIATED
+  REPORTED_TO_PPRA
+}
+
+model MisprocurementIncident {
+  id              String                  @id @db.VarChar(26)
+  indentId        String?                 @db.VarChar(26) // null when the incident is systemic (not case-level)
+  ruleReference   String                  @db.VarChar(80) // e.g. "PPRA Rule 12(2)"
+  summary         String                  @db.VarChar(500)
+  details         String                  @db.Text
+  severity        MisprocurementSeverity  @default(MEDIUM)
+  status          MisprocurementStatus    @default(OPEN)
+  detectedOn      DateTime                @db.Date
+  detectedByUserId String?                @db.VarChar(26)
+  remediatedOn    DateTime?               @db.Date
+  reportedToPPRAOn DateTime?              @db.Date
+  documentKey     String?                 @db.VarChar(500)
+  createdAt       DateTime                @default(now()) @db.DateTime(6)
+  updatedAt       DateTime                @updatedAt @db.DateTime(6)
+  version         Int                     @default(0)
+
+  @@index([indentId, status])
+  @@index([severity, status])
+}
+
+enum RetentionHoldReason {
+  LITIGATION
+  AUDIT_INQUIRY
+  INVESTIGATION
+  REGULATORY_HOLD
+  OTHER
+}
+
+model RetentionHold {
+  id             String              @id @db.VarChar(26)
+  subjectType    String              @db.VarChar(40) // "INDENT", "CONTRACT", "FIRM", etc.
+  subjectId      String              @db.VarChar(26)
+  reason         RetentionHoldReason
+  placedByUserId String              @db.VarChar(26)
+  placedOn       DateTime            @db.Date
+  releasedOn     DateTime?           @db.Date
+  releasedByUserId String?           @db.VarChar(26)
+  notes          String?             @db.Text
+  createdAt      DateTime            @default(now()) @db.DateTime(6)
+  updatedAt      DateTime            @updatedAt @db.DateTime(6)
+
+  @@index([subjectType, subjectId])
+  @@index([reason, releasedOn])
+}
+
+// =============================================================================
 // Annual Procurement Plan (PPRA Rule 8)
 //
 // Each fiscal year carries at most one PUBLISHED plan comprising line items

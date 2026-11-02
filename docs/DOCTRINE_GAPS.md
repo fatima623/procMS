@@ -156,17 +156,31 @@ guard — wired into `IssuePRUseCase`. UI at **/compliance/grievances**.
 dates) and 10-working-day SLA alerting; wire the same guard into any
 future `AwardContractUseCase`.
 
-### A12. Mis-procurement audit trail (PPRA Rule 50) ⚠️
+### A12. Mis-procurement audit trail (PPRA Rule 50) ✅ *(2026-11-02)*
 `AuditLog` already exists but is not segmented by "mis-procurement incident".
-Any breach that reaches `UPHELD` should produce a `MisprocurementIncident` row
-for Authority reporting.
 
-### A13. Public access to award documents (PPRA Rule 47) ❌
+**Shipped.** `MisprocurementIncident { indentId?, ruleReference,
+summary, details, severity (LOW/MEDIUM/HIGH/CRITICAL), status (OPEN/
+REMEDIATED/REPORTED_TO_PPRA), detectedOn, detectedByUserId,
+remediatedOn, reportedToPPRAOn, documentKey, version }` with log /
+remediate / report-to-PPRA endpoints. Admin UI at **/transparency/incidents**.
+
+**Still to do.** Auto-log an incident from the compliance guards
+(blacklist breach, missing Integrity Pact, Rule 12 shortfall) rather
+than only recording them manually.
+
+### A13. Public access to award documents (PPRA Rule 47) ✅ *(2026-11-02)*
 As soon as a contract is awarded, all evaluation and award documents must be
-public. No `/public/{indentId}/documents` endpoint exists today.
+public.
 
-**What to add.** A read-only, un-authed route that returns award + evaluation
-docs for a given indent that has a `Contract` and no `withholdingApprovedBy`.
+**Shipped.** Unauthenticated `GET /api/public/awards/[indentId]` returns
+the award evidence (indent subject + estimated value, advertisement
+timeline, CST line summary with firm names + prices + rank +
+recommended-for-award flag, and the contract: number, firm, value,
+awarded/signed dates). Returns 404 unless a Contract exists. The
+response carries `cache-control: public, max-age=300`. The endpoint
+exposes nothing beyond firm name — no user identifiers. Admin index at
+**/transparency/awards** lists every awarded contract with its public URL.
 
 ---
 
@@ -285,13 +299,18 @@ Chapter XXVIII (pp. 248–252): the two-tier appeals mechanism beyond the GRC.
 
 **What to add.** `Appeal { grievanceId, appealedOn, decidedOn, outcome }`.
 
-### B13. Record retention (PPRA Rule 46) ⚠️
-Rule 46: minimum five-year retention of procurement proceedings. We retain
-in the DB indefinitely, but no explicit retention policy, hold flags for
-litigation, or evidence of destruction.
+### B13. Record retention (PPRA Rule 46) ✅ *(2026-11-02)*
+Rule 46: minimum five-year retention of procurement proceedings.
 
-**What to add.** `RetentionHold { subjectKind, subjectId, placedByUserId, reason, placedOn, releasedOn? }`
-and an admin page to apply/release.
+**Shipped.** `RetentionHold { subjectType, subjectId, reason
+(LITIGATION / AUDIT_INQUIRY / INVESTIGATION / REGULATORY_HOLD /
+OTHER), placedByUserId, placedOn, releasedOn, releasedByUserId,
+notes }`. Place/release endpoints; `transparencyService.isHeld(type,
+id)` for callers that need to gate a disposal action. UI at
+**/transparency/retention-holds**.
+
+**Still to do.** A nightly purge job that enforces the 5-year
+retention floor, skipping subjects with an active hold.
 
 ---
 

@@ -145,6 +145,8 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
     column (PPRA Rules 8 and 23(4)).
   - `20261102240000_add_preaward_compliance` — adds `CommercialOffer.bidValidUntil`
     column (PPRA Rule 26).
+  - `20261102260000_add_transparency_retention` — MisprocurementIncident + RetentionHold
+    tables (PPRA Rules 46, 50).
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is
