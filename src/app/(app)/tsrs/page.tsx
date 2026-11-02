@@ -6,6 +6,7 @@ import { Empty } from '@/interfaces/ui/components/Empty';
 import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { KpiCard } from '@/interfaces/ui/components/KpiCard';
+import { StartTSRButton } from './StartTSRButton';
 
 export const metadata = { title: 'TSR queue • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -61,7 +62,7 @@ export default async function TSRQueuePage() {
                   <td className="right">
                     {r.tsrId
                       ? <Link className="btn" href={`/tsrs/${r.tsrId}`}>Open →</Link>
-                      : <span className="muted">—</span>}
+                      : <StartTSRButton itPerformaId={r.itId} />}
                   </td>
                 </tr>
               ))}
