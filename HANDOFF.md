@@ -73,19 +73,48 @@ just use `procMS`.
   `procMS` merged in); `CLAUDE.md` + this `HANDOFF.md` committed to `main` and pushed to **both**
   `procMS` and `procurement-system`, so a fresh clone of either has them immediately.
 - The app runs (Next.js 14 + Prisma + MySQL); schema already includes the execution-half models.
-- **UI/UX / workflow improvement work has NOT started yet** — this is the kick-off handoff.
+- **Branch `feat/admin-workflows`** — kicked off on 2026-11-02. Two commits so far:
+  1. `5d514f2` — admin-visible top-level list pages (IT Proformas / Commercial Offers / CSTs /
+     PRs), Execution hub with create forms for Advertisement / Contract / Guarantee / Invoice /
+     Payment / LC / LC Amendment, "Start TSR" button on `/tsrs`, plus `docs/E2E_WORKFLOW_GUIDE.md`
+     and `docs/DOCTRINE_GAPS.md`.
+  2. **Compliance controls** — three new workflows per the doctrine gaps:
+     - **Blacklist** (PPRA Rule 19) — model, migration, admin service, declare + revoke endpoints,
+       UI at `/compliance/blacklists`.
+     - **Integrity Pact** (PPRA Rule 7) — model, migration, create + counter-sign endpoints,
+       UI at `/compliance/integrity-pacts`.
+     - **Grievance / GRC** (PPRA Rules 48 / 50) — model, migration, file + decide + appeal +
+       withdraw endpoints, UI at `/compliance/grievances`.
+     - Three guards wired into `IssuePRUseCase` so a blacklisted firm, a pending pre-award
+       grievance, or a missing Integrity Pact (indent > PKR 10 M) refuses the PR issue.
+     - `tests/domain/ComplianceSchemas.test.ts` — 12 passing vitest cases locking the Zod shapes.
+     - Prisma migration `20261102120000_add_compliance_controls` — the next machine needs to run
+       `npx prisma migrate dev` to apply it.
 
 ## Where to continue next
 
-**Goal:** improve the **workflows and UI/UX** of ProcMS.
+**Branch:** `feat/admin-workflows` (not `feat/ui-ux`). Pull it and build on the three guards
+already added. The remaining top-priority items from `docs/DOCTRINE_GAPS.md § D` are:
 
-The specific first target is the user's call — when you resume, ask (or confirm) which screen /
-workflow to tackle first, then work on a `feat/ui-ux` branch. Sensible entry points to offer:
-- **Approval chain screen** (`src/app/(app)/approvals/…`) — the multi-step approval UI shown during
-  companion testing; a good candidate for clearer step status, actor cues, and the decision form.
-- **Indent create/detail** (`src/app/(app)/indents/…`) — the aggregate root; the most-used flow.
-- **Dashboard** (`src/app/(app)/dashboard/…`) — KPI cards, navigation, at-a-glance workflow state.
-- **TSR / CST** screens — dense tabular review steps that usually benefit most from UX work.
+1. **B1 — DP extensions + Liquidated Damages** (DPP&I-35 Ch XIII). Models
+   `DeliveryPeriod { contractId, originalDP, extendedDP, extensionReason, grantedByUserId,
+   grantedOn }` and `LiquidatedDamages { contractId, assessedOn, amountMinor, basis }`. UI on
+   `/execution/contracts/[id]/dp`. Rule: LD typically 2% per month of delay, capped at 10%.
+2. **B2 — Inspection reports + discrepancies** (DPP&I-35 Ch XVI). Gates the Taking-Over
+   Certificate on `Contract`. Models `Inspection` and `Discrepancy`; UI under `/inspection`.
+3. **Wider blacklist guard integration.** The guard is only in `IssuePRUseCase` today — also
+   hook it into IT invite creation and `OpenCommercialOfferUseCase` so a blacklisted firm is
+   refused earlier.
+4. **Committee registry** for the GRC (odd-numbered members, term dates) — PPRA Rule 48.
+5. **Seeding** — the ZeroLink gap note still applies: only ~4 of 23 seeded indents reach
+   award + execution; seed more cases through to Contract/Invoice/Payment so execution rules
+   stop being `NOT_EVALUABLE`.
+
+Other sensible UI/UX targets that remain unchanged from the earlier handoff:
+- **Approval chain screen** (`src/app/(app)/approvals/…`)
+- **Indent create/detail** (`src/app/(app)/indents/…`)
+- **Dashboard** (`src/app/(app)/dashboard/…`) — add a "compliance posture" tile that reads from
+  the new models (active blacklists, pending grievances, pacts awaiting counter-signature).
 
 **Guardrails while changing UI (see CLAUDE.md → ZeroLinkAI compliance context):**
 - Keep form fields labelled and values unambiguous — the ZeroLink screen companion reads these
@@ -100,7 +129,10 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
 ---
 
 ## Quick facts
-- **Working branch:** `feat/ui-ux` (create on first use). `main` stays releasable.
+- **Working branch:** `feat/admin-workflows` (superseded `feat/ui-ux`). `main` stays releasable.
 - **Run it:** `npm install && npx prisma migrate dev && npm run seed && npm run dev` → `http://localhost:3000` (companion tests used `-p 3200`).
+- **New migration to apply after pull:** `20261102120000_add_compliance_controls` — adds the
+  `Blacklist`, `IntegrityPact` and `Grievance` tables. Run `npx prisma migrate dev` once.
 - **Before commit:** `npm run typecheck`, `npm test`.
-- **Push target:** `git push origin feat/ui-ux` on a fresh `procMS` clone (its `origin` = procMS).
+- **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is
+  named `remote`, so `git push remote feat/admin-workflows`; a fresh `procMS` clone names it `origin`).

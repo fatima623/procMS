@@ -214,7 +214,7 @@ model Firm {
   country       String?  @db.VarChar(120)
   email         String?  @db.VarChar(254)
   phone         String?  @db.VarChar(60)
-  isBlacklisted Boolean  @default(false)
+  isBlacklisted Boolean  @default(false) // denormalised cache; derived from Blacklist rows with status=ACTIVE
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now()) @db.DateTime(6)
   updatedAt     DateTime @updatedAt @db.DateTime(6)
@@ -226,6 +226,9 @@ model Firm {
   tsrQueries           TSRQuery[]
   purchaseRequisitions PurchaseRequisition[]
   contracts            Contract[]
+  blacklists           Blacklist[]
+  grievances           Grievance[]
+  integrityPacts       IntegrityPact[]
 }
 
 // -----------------------------------------------------------------------------
@@ -333,6 +336,8 @@ model Indent {
   comments       Comment[]
   advertisements Advertisement[]
   contract       Contract?
+  grievances     Grievance[]
+  integrityPacts IntegrityPact[]
 
   @@index([status])
   @@index([sectionId])
@@ -947,4 +952,116 @@ model LCAmendment {
   letterOfCredit LetterOfCredit @relation(fields: [letterOfCreditId], references: [id], onDelete: Cascade)
 
   @@index([letterOfCreditId])
+}
+
+// =============================================================================
+// Compliance-controls (PPRA + DPP&I-35 — ZeroLink gap fills)
+//
+// Three cross-cutting controls the base system did not capture, each guarding a
+// workflow transition elsewhere:
+//
+//   - Blacklist      (PPRA Rule 19)   — bars award / invite to a blacklisted firm
+//   - IntegrityPact  (PPRA Rule 7)    — required for every procurement > PKR 10M
+//   - Grievance      (PPRA Rules 48/50; DPP&I-35 Ch XXVIII)
+//                                     — bars PR issue / contract award while PENDING
+//
+// `Firm.isBlacklisted` is kept as a denormalised fast-path flag that the
+// Blacklist use-cases keep in sync; the authoritative source is the Blacklist
+// row set.
+// =============================================================================
+
+enum BlacklistStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum BlacklistGround {
+  CORRUPT_PRACTICE
+  FRAUDULENT_PRACTICE
+  COERCIVE_PRACTICE
+  COLLUSIVE_PRACTICE
+  OBSTRUCTIVE_PRACTICE
+  PERFORMANCE_FAILURE
+  BID_DEVIATION
+  OTHER
+}
+
+model Blacklist {
+  id              String          @id @db.VarChar(26)
+  firmId          String          @db.VarChar(26)
+  declaredOn      DateTime        @db.Date
+  effectiveFrom   DateTime        @db.Date
+  effectiveUntil  DateTime?       @db.Date // null = indefinite until revoked
+  ground          BlacklistGround
+  reason          String          @db.Text
+  decidedByUserId String          @db.VarChar(26)
+  documentKey     String?         @db.VarChar(500) // S3/object-store key for the signed order
+  status          BlacklistStatus @default(ACTIVE)
+  revokedOn       DateTime?       @db.Date
+  revokedByUserId String?         @db.VarChar(26)
+  revokedReason   String?         @db.Text
+  createdAt       DateTime        @default(now()) @db.DateTime(6)
+  updatedAt       DateTime        @updatedAt @db.DateTime(6)
+  version         Int             @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, status])
+  @@index([status, effectiveUntil])
+}
+
+model IntegrityPact {
+  id                  String    @id @db.VarChar(26)
+  indentId            String    @db.VarChar(26)
+  firmId              String    @db.VarChar(26)
+  signedByBuyerUserId String    @db.VarChar(26)
+  signedByBuyerOn     DateTime  @db.Date
+  signedBySupplierOn  DateTime? @db.Date // populated once the firm counter-signs
+  documentKey         String?   @db.VarChar(500)
+  createdAt           DateTime  @default(now()) @db.DateTime(6)
+  updatedAt           DateTime  @updatedAt @db.DateTime(6)
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  firm   Firm   @relation(fields: [firmId], references: [id])
+
+  @@unique([indentId, firmId]) // one pact per firm per indent
+  @@index([indentId])
+}
+
+enum GrievanceStatus {
+  PENDING
+  UPHELD
+  REJECTED
+  WITHDRAWN
+  APPEALED
+}
+
+enum GrievanceStage {
+  PRE_AWARD   // raised before award — blocks PR issue + contract award
+  POST_AWARD  // raised after award — informational / appeals
+}
+
+model Grievance {
+  id                String          @id @db.VarChar(26)
+  indentId          String          @db.VarChar(26)
+  firmId            String?         @db.VarChar(26) // null = anonymous bidder complaint
+  filedByUserId     String?         @db.VarChar(26) // internal filer when applicable
+  filedOn           DateTime        @db.Date
+  basis             String          @db.Text        // the complaint, as filed
+  stage             GrievanceStage  @default(PRE_AWARD)
+  status            GrievanceStatus @default(PENDING)
+  grcDecisionOn     DateTime?       @db.Date        // PPRA Rule 48/50 — decide within 10 working days
+  grcDecisionText   String?         @db.Text
+  appealedToPPRAOn  DateTime?       @db.Date
+  documentKey       String?         @db.VarChar(500)
+  createdAt         DateTime        @default(now()) @db.DateTime(6)
+  updatedAt         DateTime        @updatedAt @db.DateTime(6)
+  version           Int             @default(0)
+
+  indent Indent @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  firm   Firm?  @relation(fields: [firmId], references: [id])
+
+  @@index([indentId, status])
+  @@index([status, filedOn])
 }

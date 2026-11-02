@@ -67,12 +67,15 @@ issued by PPRA. Today the IT Proforma is a free-text artefact.
 served by PPRA; attach a template id to each IT Proforma; compliance flags
 when the IT is prepared without one.
 
-### A6. Integrity Pact (PPRA Rule 7) ❌
+### A6. Integrity Pact (PPRA Rule 7) ✅ *(2026-11-02)*
 Rule 7: all procurements > PKR 10,000,000 must include a signed Integrity
-Pact between buyer and bidder. Today we have no evidence of that pact.
+Pact between buyer and bidder.
 
-**What to add.** `IntegrityPact { indentId, firmId, signedByBuyerOn, signedBySupplierOn, documentKey }`, 
-required when IT value > 10M.
+**Shipped.** `IntegrityPact { indentId, firmId, signedByBuyerUserId,
+signedByBuyerOn, signedBySupplierOn, documentKey }`, enforced in
+`IssuePRUseCase` when the indent's estimated value exceeds PKR 10 M.
+UI at **/compliance/integrity-pacts** (list + register + record
+counter-signature).
 
 ### A7. Methods of advertisement with threshold enforcement (PPRA Rule 12) ⚠️
 `Advertisement` exists (new in this release) but we don't enforce "newspaper
@@ -90,14 +93,20 @@ bid submission deadline.
 the same indent and refuse / warn when `closingAt - publishedOn < 15d`
 (or 45d for ICB).
 
-### A9. Blacklisting (PPRA Rule 19) ❌
+### A9. Blacklisting (PPRA Rule 19) ✅ *(2026-11-02)*
 Rule 19 defines blacklisting authorities, grounds, and a formal review
-petition process. The schema has no column.
+petition process.
 
-**What to add.**
-- `Blacklist { firmId, declaredOn, groundCode, decidedByUserId, duration, documentKey }`.
-- `Firm.isBlacklistedAsOf(date)` helper.
-- Guard: block invite / commercial opening / award to a blacklisted firm.
+**Shipped.** `Blacklist { firmId, declaredOn, effectiveFrom,
+effectiveUntil, ground, reason, decidedByUserId, documentKey, status,
+revokedOn, revokedByUserId, revokedReason }` plus revoke endpoint.
+`Firm.isBlacklisted` is kept in sync by the mutator.
+`compliancePolicy.assertFirmNotBlacklisted(firmId, asOf)` guard — wired
+into `IssuePRUseCase`. UI at **/compliance/blacklists**.
+
+**Still to do.** Hook the guard into `IT invite` and
+`openCommercialOffer` so a blacklisted firm is refused earlier in the
+pipeline, not only at PR issue.
 
 ### A10. Rejection of all bids / re-bidding (PPRA Rules 33–34) ❌
 Rule 33 permits rejection of all bids; Rule 34 defines re-bidding (and makes
@@ -106,15 +115,21 @@ it an auditable event).
 **What to add.** On the IT detail page, a "Reject all offers" action that
 pivots the indent to `IT_PREPARATION` with a reason, and keeps a `RejectAllRecord`.
 
-### A11. Grievance Redressal Committee (PPRA Rules 48, 50) ❌
+### A11. Grievance Redressal Committee (PPRA Rules 48, 50) ✅ *(2026-11-02)*
 Rule 48/50: GRC of odd-number members; written complaints; GRC decides within
 10 working days; bidder may appeal to the Authority; a procurement contract
 cannot be awarded while a complaint is pending.
 
-**What to add.**
-- `Grievance { indentId, firmId, filedOn, basis, status: PENDING|UPHELD|REJECTED|APPEALED, grcDecisionOn, grcDecisionText, appealedToPPRAOn }`
-- Admin section `/admin/grievances` with form.
-- Guard: no PR issue / contract award while a `PENDING` grievance exists on the indent.
+**Shipped.** `Grievance { indentId, firmId?, filedByUserId?, filedOn,
+basis, stage: PRE_AWARD | POST_AWARD, status: PENDING | UPHELD |
+REJECTED | WITHDRAWN | APPEALED, grcDecisionOn, grcDecisionText,
+appealedToPPRAOn, documentKey }` plus decide / appeal / withdraw
+endpoints. `compliancePolicy.assertNoBlockingGrievance(indentId)`
+guard — wired into `IssuePRUseCase`. UI at **/compliance/grievances**.
+
+**Still to do.** Separate Committee registry (odd-numbered members, term
+dates) and 10-working-day SLA alerting; wire the same guard into any
+future `AwardContractUseCase`.
 
 ### A12. Mis-procurement audit trail (PPRA Rule 50) ⚠️
 `AuditLog` already exists but is not segmented by "mis-procurement incident".
