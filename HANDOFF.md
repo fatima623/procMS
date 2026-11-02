@@ -135,6 +135,9 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
   - `20261102120000_add_compliance_controls` — Blacklist, IntegrityPact, Grievance tables.
   - `20261102140000_add_execution_obligations` — DeliveryPeriodExtension, LiquidatedDamages,
     Inspection, Discrepancy tables + `Contract.originalDP` column.
+  - `20261102160000_add_firm_registration` — FirmRegistration table (pre-qualification).
+  - `20261102180000_add_committees_contract_amendments` — Committee, CommitteeMember,
+    ContractAmendment tables.
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is

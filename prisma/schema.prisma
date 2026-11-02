@@ -877,6 +877,7 @@ model Contract {
   dpExtensions      DeliveryPeriodExtension[]
   liquidatedDamages LiquidatedDamages[]
   inspections       Inspection[]
+  amendments        ContractAmendment[]
 
   @@index([firmId])
   @@index([status])
@@ -1147,6 +1148,98 @@ model Inspection {
   discrepancies Discrepancy[]
 
   @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Committees (PPRA Rule 48 GRC + general TEC / FEC)
+//
+// A committee has a kind (GRC — grievance redressal; TEC — tender evaluation;
+// FEC — finance evaluation; OTHER), a term, and an ordered list of members.
+// The service layer enforces "odd-number members" for GRC bodies.
+// =============================================================================
+
+enum CommitteeKind {
+  GRC
+  TEC
+  FEC
+  INSPECTION
+  OTHER
+}
+
+model Committee {
+  id          String        @id @db.VarChar(26)
+  kind        CommitteeKind
+  name        String        @db.VarChar(200)
+  termStart   DateTime      @db.Date
+  termEnd     DateTime?     @db.Date
+  isActive    Boolean       @default(true)
+  notes       String?       @db.Text
+  createdAt   DateTime      @default(now()) @db.DateTime(6)
+  updatedAt   DateTime      @updatedAt @db.DateTime(6)
+  version     Int           @default(0)
+
+  members CommitteeMember[]
+
+  @@index([kind, isActive])
+}
+
+model CommitteeMember {
+  id            String    @id @db.VarChar(26)
+  committeeId   String    @db.VarChar(26)
+  userId        String    @db.VarChar(26) // User (civilian/military identity in the User table)
+  memberRole    String    @db.VarChar(80)  // "Chair", "Secretary", "Member", etc.
+  joinedOn      DateTime  @db.Date
+  leftOn        DateTime? @db.Date
+  createdAt     DateTime  @default(now()) @db.DateTime(6)
+
+  committee Committee @relation(fields: [committeeId], references: [id], onDelete: Cascade)
+
+  @@unique([committeeId, userId])
+  @@index([committeeId])
+}
+
+// =============================================================================
+// Contract amendments (DPP&I-35 Ch XXI)
+//
+// A formal amendment to a signed Contract — scope (QTY/DP/VALUE/SPEC/OTHER),
+// delta value where applicable, request + approval dates, approving authority,
+// reason, and the supporting document key.
+// =============================================================================
+
+enum ContractAmendmentScope {
+  QTY       // quantity change
+  DP        // delivery period change (companion to DeliveryPeriodExtension)
+  VALUE     // value change
+  SPEC      // technical specification change
+  OTHER
+}
+
+enum ContractAmendmentStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+}
+
+model ContractAmendment {
+  id                  String                  @id @db.VarChar(26)
+  contractId          String                  @db.VarChar(26)
+  scope               ContractAmendmentScope
+  summary             String                  @db.Text        // one-paragraph change description
+  deltaValue          Decimal?                @db.Decimal(20, 4) // signed; positive = add, negative = reduce
+  deltaCurrency       String?                 @db.VarChar(3)
+  requestedOn         DateTime                @db.Date
+  approvedOn          DateTime?               @db.Date
+  approvedByUserId    String?                 @db.VarChar(26)
+  status              ContractAmendmentStatus @default(PROPOSED)
+  rejectionReason     String?                 @db.Text
+  documentKey         String?                 @db.VarChar(500)
+  createdAt           DateTime                @default(now()) @db.DateTime(6)
+  updatedAt           DateTime                @updatedAt @db.DateTime(6)
+  version             Int                     @default(0)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, status])
 }
 
 // =============================================================================

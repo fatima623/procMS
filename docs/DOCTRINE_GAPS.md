@@ -34,21 +34,23 @@ same budget head + same section + overlapping description window, grouped by
 submitter, in the same fiscal month, and raises a soft warning that evaluation
 can promote to a breach.
 
-### A3. Pre-qualification of firms (PPRA Rules 15–16; DPP&I-35 Ch XXVI) ❌
+### A3. Pre-qualification of firms (PPRA Rules 15–16; DPP&I-35 Ch XXVI) ✅ *(2026-11-02)*
 Chapter XXVI (pp. 204–238 of DPP&I-35) is a whole workflow in itself:
-Registration → Document checklist → Payment of fees → Lead-agency vetting →
+Registration → Document checklist → Lead-agency vetting →
 Issuance of **certificate** with validity → Renewals → Revocation.
 
-**What we have.** The `Firm` model with name, legal data, and `FirmInvite`
-records — no registration workflow, no certificate, no validity date, no
-documents.
+**Shipped.** `FirmRegistration { firmId, category (12-value enum),
+submittedOn, status (PENDING / APPROVED / REJECTED / EXPIRED / REVOKED),
+issuedOn, validUntil, certificateKey, reviewedByUserId, reviewNotes,
+revokedOn, revokedReason, version }`. Lifecycle service with submit /
+approve / reject / revoke. `assertFirmPreQualified(firmId, category | null,
+asOf)` guard wired into `CreateITPerformaUseCase` (currently with
+`category = null` — any APPROVED registration qualifies the firm; see
+below). UI at **/registration** with inline Approve / Reject / Revoke.
 
-**What to add.**
-- `FirmRegistration { firmId, submittedOn, documentKey, status, issuedOn, validUntil, categories[] }`
-- `FirmPreQualification` similar, scoped to a specific indent's category.
-- Admin pages `/admin/firms/[id]/registration` and `/firms/[id]/prequal` with
-  issue / renew / revoke actions.
-- Compliance check: refuse IT invite to a firm whose registration lapsed.
+**Still to do.** Bind the IT invite's category to `Indent.category` so the
+guard can require a matching registration category rather than any; add
+a nightly job that flips APPROVED → EXPIRED when `validUntil` passes.
 
 ### A4. Bid validity tracking (PPRA Rule 26) ⚠️
 Rule 26: bids must be processed within their validity period; expiring soon →
@@ -201,11 +203,15 @@ Chapter XX (pp. 148–151): agent commission disclosure and limits.
 
 **What to add.** `AgentCommission { contractId, agentFirmId, percent, amountMinor, approvedOn }`.
 
-### B7. Contract amendments (DPP&I-35 Ch XXI) ⚠️
-Chapter XXI (pp. 152–156): formal amendments to quantity, DP, or value. We
-have `LCAmendment` for the LC only.
+### B7. Contract amendments (DPP&I-35 Ch XXI) ✅ *(2026-11-02)*
+Chapter XXI (pp. 152–156): formal amendments to quantity, DP, or value.
 
-**What to add.** `ContractAmendment { contractId, requestedOn, approvedOn, scope: QTY|DP|VALUE|SPEC, deltaMinor, document }`.
+**Shipped.** `ContractAmendment { contractId, scope (QTY | DP | VALUE |
+SPEC | OTHER), summary, deltaValue, deltaCurrency, requestedOn,
+approvedOn, approvedByUserId, status (PROPOSED / APPROVED / REJECTED),
+rejectionReason, documentKey }`. Approving a VALUE / QTY amendment with a
+non-null delta moves the parent `Contract.value` in the same transaction.
+UI at **/governance/contract-amendments**.
 
 ### B8. Risk purchase (DPP&I-35 Ch XXII) ❌
 Chapter XXII (pp. 157–163): on supplier failure, re-tender at supplier's cost
@@ -250,12 +256,18 @@ and an admin page to apply/release.
 
 ## C. Cross-cutting / platform
 
-### C1. Procuring-agency Committee registry ❌
-PPRA Rule 48 requires a GRC comprising an odd number of members; the app has
-no committee entity.
+### C1. Procuring-agency Committee registry ✅ *(2026-11-02)*
+PPRA Rule 48 requires a GRC comprising an odd number of members.
 
-**What to add.** `Committee { kind: GRC|TEC|FEC, members[], termStart, termEnd }`
-with per-indent assignment.
+**Shipped.** `Committee { kind (GRC | TEC | FEC | INSPECTION | OTHER),
+name, termStart, termEnd, isActive, notes, members[] }` with
+`CommitteeMember { userId, memberRole, joinedOn, leftOn }`. The service
+refuses a GRC with an even-sized membership on create / add / remove.
+UI at **/governance/committees**.
+
+**Still to do.** Per-indent assignment (link a GRC to the indent whose
+grievance it is deciding) and a 10-working-day SLA alert on PENDING
+grievances assigned to a given GRC.
 
 ### C2. Document templates signed-off library ⚠️
 The compliance engine looks for template keys on `IndentItem`, `IT`, and
