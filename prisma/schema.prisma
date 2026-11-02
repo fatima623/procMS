@@ -169,8 +169,9 @@ model FiscalYear {
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now()) @db.DateTime(6)
 
-  budgetAllocations BudgetAllocation[]
-  indents           Indent[]
+  budgetAllocations      BudgetAllocation[]
+  indents                Indent[]
+  annualProcurementPlans AnnualProcurementPlan[]
 }
 
 model BudgetHead {
@@ -180,8 +181,9 @@ model BudgetHead {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now()) @db.DateTime(6)
 
-  allocations BudgetAllocation[]
-  indents     Indent[]
+  allocations            BudgetAllocation[]
+  indents                Indent[]
+  annualPlanItems        AnnualProcurementPlanItem[]
 }
 
 model BudgetAllocation {
@@ -308,11 +310,12 @@ model Indent {
   estimatedValue Decimal @db.Decimal(20, 4)
   currency       String  @default("PKR") @db.VarChar(3)
 
-  indenterId    String  @db.VarChar(26)
-  sectionId     String  @db.VarChar(26) // owning section (indenter's)
-  assignedAdpId String? @db.VarChar(26) // Concerned ADP section
-  fiscalYearId  String  @db.VarChar(26)
-  budgetHeadId  String  @db.VarChar(26)
+  indenterId     String  @db.VarChar(26)
+  sectionId      String  @db.VarChar(26) // owning section (indenter's)
+  assignedAdpId  String? @db.VarChar(26) // Concerned ADP section
+  fiscalYearId   String  @db.VarChar(26)
+  budgetHeadId   String  @db.VarChar(26)
+  plannedItemId  String? @db.VarChar(26) // optional link to annual plan item (PPRA Rule 8)
 
   submittedAt     DateTime? @db.DateTime(6)
   closedAt        DateTime? @db.DateTime(6)
@@ -323,11 +326,12 @@ model Indent {
   updatedAt DateTime @updatedAt @db.DateTime(6)
   version   Int      @default(0)
 
-  indenter    User       @relation("IndenterToIndent", fields: [indenterId], references: [id])
-  section     Section    @relation("OwningSection", fields: [sectionId], references: [id])
-  assignedAdp Section?   @relation("AssignedAdp", fields: [assignedAdpId], references: [id])
-  fiscalYear  FiscalYear @relation(fields: [fiscalYearId], references: [id])
-  budgetHead  BudgetHead @relation(fields: [budgetHeadId], references: [id])
+  indenter    User                        @relation("IndenterToIndent", fields: [indenterId], references: [id])
+  section     Section                     @relation("OwningSection", fields: [sectionId], references: [id])
+  assignedAdp Section?                    @relation("AssignedAdp", fields: [assignedAdpId], references: [id])
+  fiscalYear  FiscalYear                  @relation(fields: [fiscalYearId], references: [id])
+  budgetHead  BudgetHead                  @relation(fields: [budgetHeadId], references: [id])
+  plannedItem AnnualProcurementPlanItem?  @relation("PlanItemToIndent", fields: [plannedItemId], references: [id])
 
   items          IndentItem[]
   itPerforma     ITPerforma?
@@ -1152,6 +1156,94 @@ model Inspection {
   discrepancies Discrepancy[]
 
   @@index([contractId, performedOn])
+}
+
+// =============================================================================
+// Annual Procurement Plan (PPRA Rule 8)
+//
+// Each fiscal year carries at most one PUBLISHED plan comprising line items
+// (planned procurements). An indent should ideally link to a plan line via
+// `plannedItemId`. The schema allows that link optionally so existing
+// indents remain valid.
+// =============================================================================
+
+enum AnnualPlanStatus {
+  DRAFT
+  PUBLISHED
+  SUPERSEDED
+}
+
+model AnnualProcurementPlan {
+  id                 String                      @id @db.VarChar(26)
+  fiscalYearId       String                      @db.VarChar(26)
+  publishedOn        DateTime?                   @db.Date
+  publishedByUserId  String?                     @db.VarChar(26)
+  status             AnnualPlanStatus            @default(DRAFT)
+  totalEstimate      Decimal?                    @db.Decimal(20, 4)
+  currency           String                      @default("PKR") @db.VarChar(3)
+  notes              String?                     @db.Text
+  createdAt          DateTime                    @default(now()) @db.DateTime(6)
+  updatedAt          DateTime                    @updatedAt @db.DateTime(6)
+  version            Int                         @default(0)
+
+  fiscalYear FiscalYear               @relation(fields: [fiscalYearId], references: [id])
+  items      AnnualProcurementPlanItem[]
+
+  @@unique([fiscalYearId, status]) // at most one DRAFT, one PUBLISHED per FY
+  @@index([status])
+}
+
+model AnnualProcurementPlanItem {
+  id                 String                      @id @db.VarChar(26)
+  planId             String                      @db.VarChar(26)
+  budgetHeadId       String                      @db.VarChar(26)
+  description        String                      @db.VarChar(500)
+  estimatedValue     Decimal                     @db.Decimal(20, 4)
+  currency           String                      @default("PKR") @db.VarChar(3)
+  methodHint         ProcurementMethod?
+  categoryHint       ProcurementCategory?
+  quarterHint        String?                     @db.VarChar(2) // "Q1".."Q4"
+  createdAt          DateTime                    @default(now()) @db.DateTime(6)
+  updatedAt          DateTime                    @updatedAt @db.DateTime(6)
+
+  plan        AnnualProcurementPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  budgetHead  BudgetHead            @relation(fields: [budgetHeadId], references: [id])
+  indents     Indent[]              @relation("PlanItemToIndent")
+
+  @@index([planId])
+  @@index([budgetHeadId])
+}
+
+// =============================================================================
+// Standard Bidding Documents (PPRA Rule 23(4))
+//
+// Rule 23(4): procuring agencies "shall use standard bidding documents" issued
+// by PPRA. A template library — each row is a versioned, kind-tagged document
+// (goods / works / services / consultancy). An IT proforma can be tagged with
+// a template id so compliance can bind.
+// =============================================================================
+
+enum BiddingDocumentKind {
+  GOODS
+  WORKS
+  SERVICES
+  CONSULTANCY
+}
+
+model BiddingDocumentTemplate {
+  id          String              @id @db.VarChar(26)
+  kind        BiddingDocumentKind
+  name        String              @db.VarChar(200)
+  revision    String              @db.VarChar(40) // "v1", "v2.1", "2026-01"
+  publishedOn DateTime            @db.Date
+  isActive    Boolean             @default(true)
+  bodyKey     String?             @db.VarChar(500) // object-store key for the template body
+  summary     String?             @db.Text
+  createdAt   DateTime            @default(now()) @db.DateTime(6)
+  updatedAt   DateTime            @updatedAt @db.DateTime(6)
+
+  @@unique([kind, revision])
+  @@index([kind, isActive])
 }
 
 // =============================================================================

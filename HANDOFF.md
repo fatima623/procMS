@@ -140,6 +140,9 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
     ContractAmendment tables.
   - `20261102200000_add_execution_evidence` — Insurance, Shipment, EndUserCertificate,
     AgentCommission tables (DPP&I-35 Chapters XVII–XX).
+  - `20261102220000_add_annual_plan_bidding_doc_templates` — AnnualProcurementPlan,
+    AnnualProcurementPlanItem, BiddingDocumentTemplate tables, plus `Indent.plannedItemId`
+    column (PPRA Rules 8 and 23(4)).
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is

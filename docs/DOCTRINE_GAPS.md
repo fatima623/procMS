@@ -12,27 +12,36 @@ Legend: ✅ in app · ⚠️ partial · ❌ missing.
 
 ## A. Pre-award — currently missing
 
-### A1. Annual Procurement Plan (PPRA Rule 8) ❌
-**What the rule says.** Each procuring agency must publish an annual plan
-listing all intended procurements for the fiscal year within one year of PPRA
-Rule 8 commencement; the plan is the first act in a compliant cycle.
+### A1. Annual Procurement Plan (PPRA Rule 8) ✅ *(2026-11-02)*
+**What the rule says.** Each procuring agency publishes an annual plan
+listing all intended procurements for the fiscal year.
 
-**What we have.** `FiscalYear`, `BudgetAllocation`, `BudgetHead` entities — but
-no `AnnualProcurementPlan` entity, no "mark indent as planned" link.
+**Shipped.** `AnnualProcurementPlan { fiscalYearId, status (DRAFT /
+PUBLISHED / SUPERSEDED), publishedOn, publishedByUserId, totalEstimate,
+currency, notes }` + `AnnualProcurementPlanItem { planId, budgetHeadId,
+description, estimatedValue, currency, methodHint, categoryHint,
+quarterHint }`. One DRAFT + one PUBLISHED per FY (DB unique);
+publishing one supersedes any prior PUBLISHED plan in the same
+transaction. UI at **/planning/annual-plans**. `Indent.plannedItemId`
+column added as an optional link to a plan line.
 
-**What to add.**
-- Prisma model `AnnualProcurementPlan { fiscalYearId, publishedOn, totalEstimateMinor, items[] { description, budgetHeadId, estimateMinor, methodHint } }`.
-- Admin page `/admin/annual-plans` with publish + list.
-- Indent create form: optional `plannedItemId` to link the indent to a planned item.
-- Compliance check: *flag* indents whose value materially exceeds the plan line, or that have no plan link in a fiscal year that has a plan.
+**Still to do.** Add a compliance check that flags indents whose value
+materially exceeds the plan line, or that have no plan link in a
+fiscal year that has a PUBLISHED plan.
 
-### A2. Splitting / regrouping check (PPRA Rule 9) ❌
+### A2. Splitting / regrouping check (PPRA Rule 9) ✅ *(2026-11-02)*
 Rule 9 forbids splitting a procurement to evade a method threshold.
 
-**What to add.** A background job that scans draft/submitted indents of the
-same budget head + same section + overlapping description window, grouped by
-submitter, in the same fiscal month, and raises a soft warning that evaluation
-can promote to a breach.
+**Shipped.** `planningReports.findSplittingSuspicions(withinDays)` groups
+recent non-cancelled indents by (indenterId, budgetHeadId, fiscalYearId),
+and flags groups whose individual values stay below the RFQ ceiling
+(PKR 500,000) but whose sum crosses either the RFQ ceiling or the open-
+bidding threshold (PKR 3,000,000). Admin view at **/planning/splitting-check**
+with a configurable window (7–365 days).
+
+**Still to do.** When the detector fires, auto-raise an `Observation`
+on each of the suspected indents so the ADP sees it in the normal
+indent flow (currently it is only visible on the splitting-check page).
 
 ### A3. Pre-qualification of firms (PPRA Rules 15–16; DPP&I-35 Ch XXVI) ✅ *(2026-11-02)*
 Chapter XXVI (pp. 204–238 of DPP&I-35) is a whole workflow in itself:
@@ -61,13 +70,18 @@ extension needed.
 **What to add.** `CommercialOffer.validUntil`, a filter in `/commercial-offers`
 for "expiring in 7 days", and a background notification.
 
-### A5. Standard Bidding Documents (PPRA Rule 23(4)) ❌
-Rule 23(4) says procuring agencies **shall use** standard bidding documents
-issued by PPRA. Today the IT Proforma is a free-text artefact.
+### A5. Standard Bidding Documents (PPRA Rule 23(4)) ✅ *(2026-11-02)*
+Rule 23(4): procuring agencies "shall use" standard bidding documents
+issued by PPRA.
 
-**What to add.** `BiddingDocumentTemplate { kind: GOODS|SERVICES|WORKS, body, publishedOn }`
-served by PPRA; attach a template id to each IT Proforma; compliance flags
-when the IT is prepared without one.
+**Shipped.** `BiddingDocumentTemplate { kind (GOODS/WORKS/SERVICES/
+CONSULTANCY), name, revision, publishedOn, isActive, bodyKey, summary }`
+with a unique (kind, revision) index. Admin UI at **/planning/bidding-templates**
+with register + retire.
+
+**Still to do.** Attach an optional `biddingDocumentTemplateId` to
+`ITPerforma`, require it in `CreateITPerformaUseCase` once templates
+exist for the matching kind, and raise a soft warning otherwise.
 
 ### A6. Integrity Pact (PPRA Rule 7) ✅ *(2026-11-02)*
 Rule 7: all procurements > PKR 10,000,000 must include a signed Integrity
