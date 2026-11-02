@@ -2,11 +2,13 @@ import Link from 'next/link';
 import { Role } from '@prisma/client';
 import { requireSessionCtx } from '@/interfaces/ui/auth';
 import { loadDashboardSummary, SLA_DAYS } from '@/interfaces/ui/views/DashboardView';
+import { loadCompliancePosture } from '@/interfaces/ui/views/CompliancePostureView';
 import { StatusPill, toneForIndentStatus } from '@/interfaces/ui/components/StatusPill';
 import { MoneyLabel, MoneyCompact } from '@/interfaces/ui/components/Money';
 import { Sparkbar } from '@/interfaces/ui/components/Sparkbar';
 import { KpiCard, HeroCard, type Accent } from '@/interfaces/ui/components/KpiCard';
 import { WelcomeTour, type TourStep } from './WelcomeTour';
+import { CompliancePosturePanel } from './CompliancePosturePanel';
 
 export const metadata = { title: 'Dashboard • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +41,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
   const ctx = await requireSessionCtx();
   const s = await loadDashboardSummary(ctx, { ...(searchParams.fy ? { fiscalYearId: searchParams.fy } : {}) });
   const isAdmin = ctx.roles.includes(Role.ADMIN);
+  const seniorRoles: readonly Role[] = [Role.ADMIN, Role.DGDP, Role.SECY_DP, Role.DP_N];
+  const showCompliancePosture = seniorRoles.some((r) => ctx.roles.includes(r));
+  const posture = showCompliancePosture ? await loadCompliancePosture() : null;
 
   // Role-aware tile set, each with its own accent + icon.
   type Tile = { show: boolean; accent: Accent; icon: React.ReactNode; title: string; value: number | string; href: string; sub?: string };
@@ -102,6 +107,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
           <KpiCard key={t.title} accent={t.accent} icon={t.icon} label={t.title} value={t.value} sub={t.sub} href={t.href} />
         ))}
       </section>
+
+      {/* Compliance posture — senior staff / admin only */}
+      {posture && <CompliancePosturePanel posture={posture} />}
 
       {isAdmin && (
         <>

@@ -36,11 +36,38 @@ type Db = PrismaClient | Prisma.TransactionClient;
  * participate in a caller's existing transaction (via UoW); the admin mutation
  * methods open their own transaction.
  */
+/**
+ * Fire-and-forget incident logger — writes a MisprocurementIncident row
+ * when a compliance guard blocks an action. We swallow errors here so a
+ * logging failure never masks the original ValidationError the guard throws.
+ */
+async function logIncident(indentId: string | null, ruleReference: string, summary: string, details: string): Promise<void> {
+  try {
+    await defaultPrisma.misprocurementIncident.create({
+      data: {
+        id: ulid(),
+        indentId,
+        ruleReference,
+        summary: summary.slice(0, 500),
+        details,
+        severity: 'HIGH',
+        detectedOn: new Date(),
+      },
+    });
+  } catch {
+    // never mask the caller's error
+  }
+}
+
 export const compliancePolicy = {
   // --- Guards called by other use-cases ---------------------------------------
 
-  /** Throws ValidationError if the firm has an ACTIVE blacklist row on `asOf`. */
-  async assertFirmNotBlacklisted(firmId: string, asOf: Date, db: Db = defaultPrisma): Promise<void> {
+  /**
+   * Throws ValidationError if the firm has an ACTIVE blacklist row on `asOf`.
+   * When `context.indentId` is provided, also writes a MisprocurementIncident
+   * row (fire-and-forget) so analytics can see repeated breach attempts.
+   */
+  async assertFirmNotBlacklisted(firmId: string, asOf: Date, db: Db = defaultPrisma, context: { readonly indentId?: string } = {}): Promise<void> {
     const row = await db.blacklist.findFirst({
       where: {
         firmId,
@@ -52,9 +79,14 @@ export const compliancePolicy = {
     });
     if (row) {
       const until = row.effectiveUntil ? ` until ${row.effectiveUntil.toISOString().slice(0, 10)}` : ' (indefinite)';
-      throw new ValidationError(
-        `Firm is blacklisted on ${row.ground.replace(/_/g, ' ').toLowerCase()}${until}`,
+      const message = `Firm is blacklisted on ${row.ground.replace(/_/g, ' ').toLowerCase()}${until}`;
+      await logIncident(
+        context.indentId ?? null,
+        'PPRA Rule 19',
+        `Attempted action against blacklisted firm ${firmId}`,
+        `${message}. BlacklistId=${row.id}.`,
       );
+      throw new ValidationError(message);
     }
   },
 
@@ -76,9 +108,9 @@ export const compliancePolicy = {
       select: { id: true, signedByBuyerOn: true },
     });
     if (!pact) {
-      throw new ValidationError(
-        'Integrity Pact required (PPRA Rule 7) — indent value exceeds PKR 10,000,000 and no signed pact exists for this firm',
-      );
+      const message = 'Integrity Pact required (PPRA Rule 7) — indent value exceeds PKR 10,000,000 and no signed pact exists for this firm';
+      await logIncident(indentId, 'PPRA Rule 7', 'Attempted award without Integrity Pact', `${message}. Indent ${indentId}, firm ${firmId}.`);
+      throw new ValidationError(message);
     }
   },
 
@@ -98,9 +130,9 @@ export const compliancePolicy = {
       select: { id: true, status: true, filedOn: true },
     });
     if (row) {
-      throw new ValidationError(
-        `Cannot award: grievance ${row.id} is ${row.status.toLowerCase()} on this indent (filed ${row.filedOn.toISOString().slice(0, 10)})`,
-      );
+      const message = `Cannot award: grievance ${row.id} is ${row.status.toLowerCase()} on this indent (filed ${row.filedOn.toISOString().slice(0, 10)})`;
+      await logIncident(indentId, 'PPRA Rule 48/50', 'Attempted award while grievance pending/appealed', message);
+      throw new ValidationError(message);
     }
   },
 

@@ -71,7 +71,7 @@ export class IssuePRUseCase {
       const indent = cstHead.itPerforma.indent;
       const firmId = cstHead.lines[0].commercialOffer.firmId;
       const now = this.deps.clock.now();
-      await compliancePolicy.assertFirmNotBlacklisted(firmId, now);
+      await compliancePolicy.assertFirmNotBlacklisted(firmId, now, undefined, { indentId: indent.id });
       await compliancePolicy.assertNoBlockingGrievance(indent.id);
       await compliancePolicy.assertIntegrityPactPresentIfRequired(
         indent.id,

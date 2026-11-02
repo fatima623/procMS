@@ -49,7 +49,7 @@ export class CreateITPerformaUseCase {
     // category binding; wire category once Indent.category is used here).
     const now = this.deps.clock.now();
     for (const firmId of dto.invitedFirmIds) {
-      await compliancePolicy.assertFirmNotBlacklisted(firmId, now);
+      await compliancePolicy.assertFirmNotBlacklisted(firmId, now, undefined, { indentId: dto.indentId });
       await firmRegistrationService.assertFirmPreQualified(firmId, null, now);
     }
 

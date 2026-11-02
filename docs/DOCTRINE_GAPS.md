@@ -382,11 +382,18 @@ The compliance engine looks for template keys on `IndentItem`, `IT`, and
 **What to add.** `TemplateCatalog` + per-document "which template produced
 this attachment" link.
 
-### C3. Dashboard: Compliance view ❌
-There's no "which rules fail today" surface for the ADMIN. The ZCI engine
-produces findings externally; a lightweight dashboard that embeds its summary
-(SLA burn, open grievances, expiring guarantees, late payments) would make
-the compliance posture visible in-app.
+### C3. Dashboard: Compliance view ✅ *(2026-11-02)*
+There's no "which rules fail today" surface for the ADMIN.
+
+**Shipped.** `loadCompliancePosture()` reads a 15-field snapshot of the
+compliance stores (active blacklists, pending grievances, appealed
+grievances, pending appeals, open incidents, critical incidents,
+active retention holds, pacts awaiting counter-signature, expired bid
+validity, open risk cases, open discrepancies, agent commissions
+awaiting approval, guarantees + insurance expiring within 30 days,
+FMS awaiting LOA acceptance) and renders a `CompliancePosturePanel`
+on the dashboard for ADMIN / DGDP / SECY_DP / DP_N roles. Each tile
+is a link to the admin page that owns the stat.
 
 ### C4. Firm scorecard — PPRA/DPP&I signals ⚠️
 We already have `FirmScorecardView` for turnaround metrics; extend with
