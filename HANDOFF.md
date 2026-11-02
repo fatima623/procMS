@@ -143,6 +143,8 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
   - `20261102220000_add_annual_plan_bidding_doc_templates` — AnnualProcurementPlan,
     AnnualProcurementPlanItem, BiddingDocumentTemplate tables, plus `Indent.plannedItemId`
     column (PPRA Rules 8 and 23(4)).
+  - `20261102240000_add_preaward_compliance` — adds `CommercialOffer.bidValidUntil`
+    column (PPRA Rule 26).
   Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is

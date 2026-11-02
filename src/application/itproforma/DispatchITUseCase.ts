@@ -13,6 +13,7 @@ import { hasRole } from '../ports/AuthContext';
 import type { Clock } from '../ports/Clock';
 import type { Logger } from '../ports/Logger';
 import type { UnitOfWork } from '../ports/UnitOfWork';
+import { preAwardCompliance } from '@/infrastructure/preaward/PreAwardComplianceService';
 
 export interface DispatchITDto {
   readonly closingAt: string;   // ISO datetime; firms' offer deadline
@@ -38,6 +39,18 @@ export class DispatchITUseCase {
     const closingAt = new Date(dto.closingAt);
     if (Number.isNaN(closingAt.getTime())) {
       throw new ValidationError('Invalid closingAt', { closingAt: 'must be ISO datetime' });
+    }
+
+    // Load the IT first (outside the UoW) to find the indent id, then run
+    // the pre-award compliance checks against the live indent before entering
+    // the write transaction. The checks are read-only; they fail-fast.
+    const peek = await (await import('@/infrastructure/db/prisma')).prisma.iTPerforma.findUnique({
+      where: { id: itPerformaId },
+      select: { indentId: true },
+    });
+    if (peek) {
+      await preAwardCompliance.assertAdvertisementCoverage(peek.indentId);
+      await preAwardCompliance.assertResponseTime(peek.indentId, closingAt);
     }
 
     await this.deps.uow.run(async (h) => {

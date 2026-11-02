@@ -6,6 +6,7 @@ import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { KpiCard } from '@/interfaces/ui/components/KpiCard';
 import { Empty } from '@/interfaces/ui/components/Empty';
+import { RejectAllButton } from './RejectAllButton';
 
 export const metadata = { title: 'IT Proformas • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -70,7 +71,10 @@ export default async function ITProformasPage() {
                   <td className="right mono">{r.technicalOffers} / {r.commercialOffers}</td>
                   <td><DateLabel iso={r.dispatchedAt} /></td>
                   <td><DateLabel iso={r.closingAt} /></td>
-                  <td className="right">
+                  <td className="right" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                    {r.status === 'DISPATCHED' && (r.indentStatus === 'TECH_OFFERS_OPEN' || r.indentStatus === 'TSR_IN_PROGRESS' || r.indentStatus === 'COMMERCIAL_OPEN') && (
+                      <RejectAllButton itPerformaId={r.id} />
+                    )}
                     <Link className="btn" href={`/indents/${r.indentId}`}>Open indent →</Link>
                   </td>
                 </tr>

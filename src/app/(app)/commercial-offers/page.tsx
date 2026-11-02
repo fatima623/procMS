@@ -29,7 +29,7 @@ export default async function CommercialOffersPage() {
       <div className="row" style={{ marginBottom: 16 }}>
         <h1 style={{ margin: 0 }}>Commercial offers</h1>
         <div className="grow" />
-        <span className="muted" style={{ fontSize: 13 }}>Open commercial envelopes from the indent in COMMERCIAL_OPEN status</span>
+        <Link className="btn" href="/commercial-offers/overdue-validity">Overdue validity →</Link>
       </div>
       <p className="muted">Price envelopes opened for technically accepted firms (Chapter IX DPP&amp;I-35).</p>
 
@@ -52,29 +52,41 @@ export default async function CommercialOffersPage() {
                 <th>Status</th>
                 <th className="right">Total price</th>
                 <th className="right">Bid security</th>
+                <th>Bid valid until</th>
                 <th className="right">Delivery (weeks)</th>
                 <th>Opened</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="mono">{r.itReference}</td>
-                  <td><Link href={`/indents/${r.indentId}`}>{r.indentSubject}</Link></td>
-                  <td>{r.firmName}</td>
-                  <td><StatusPill tone={r.status === 'ACCEPTED' ? 'ok' : r.status === 'REJECTED' ? 'danger' : 'info'}>{r.status}</StatusPill></td>
-                  <td className="right"><MoneyLabel amountMinor={r.totalPriceMinor} currency={r.currency} /></td>
-                  <td className="right">
-                    {r.bidSecurityMinor
-                      ? <MoneyLabel amountMinor={r.bidSecurityMinor} currency={r.currency} />
-                      : <span className="muted">—</span>}
-                  </td>
-                  <td className="right mono">{r.deliveryWeeks ?? '—'}</td>
-                  <td><DateLabel iso={r.openedAt} /></td>
-                  <td className="right"><Link className="btn" href={`/indents/${r.indentId}`}>Open indent →</Link></td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const expired = r.bidValidUntil && new Date(r.bidValidUntil).getTime() < Date.now();
+                return (
+                  <tr key={r.id}>
+                    <td className="mono">{r.itReference}</td>
+                    <td><Link href={`/indents/${r.indentId}`}>{r.indentSubject}</Link></td>
+                    <td>{r.firmName}</td>
+                    <td><StatusPill tone={r.status === 'ACCEPTED' ? 'ok' : r.status === 'REJECTED' ? 'danger' : 'info'}>{r.status}</StatusPill></td>
+                    <td className="right"><MoneyLabel amountMinor={r.totalPriceMinor} currency={r.currency} /></td>
+                    <td className="right">
+                      {r.bidSecurityMinor
+                        ? <MoneyLabel amountMinor={r.bidSecurityMinor} currency={r.currency} />
+                        : <span className="muted">—</span>}
+                    </td>
+                    <td>
+                      {r.bidValidUntil
+                        ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                            <DateLabel iso={r.bidValidUntil} />
+                            {expired && <StatusPill tone="danger">EXPIRED</StatusPill>}
+                          </span>
+                        : <span className="muted">—</span>}
+                    </td>
+                    <td className="right mono">{r.deliveryWeeks ?? '—'}</td>
+                    <td><DateLabel iso={r.openedAt} /></td>
+                    <td className="right"><Link className="btn" href={`/indents/${r.indentId}`}>Open indent →</Link></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

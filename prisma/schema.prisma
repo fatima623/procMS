@@ -625,6 +625,7 @@ model CommercialOffer {
   totalPrice        Decimal     @db.Decimal(20, 4)
   currency          String      @default("PKR") @db.VarChar(3)
   bidSecurityAmount Decimal?    @db.Decimal(20, 4) // ZeroLink merge — PPRA r25 (bid security ≤ 5% of estimate)
+  bidValidUntil     DateTime?   @db.Date // PPRA r26 — bid validity date
   deliveryWeeks     Int?
   status            OfferStatus @default(RECEIVED)
   documentKey       String?     @db.VarChar(500)

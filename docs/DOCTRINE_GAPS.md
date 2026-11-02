@@ -61,14 +61,14 @@ below). UI at **/registration** with inline Approve / Reject / Revoke.
 guard can require a matching registration category rather than any; add
 a nightly job that flips APPROVED → EXPIRED when `validUntil` passes.
 
-### A4. Bid validity tracking (PPRA Rule 26) ⚠️
-Rule 26: bids must be processed within their validity period; expiring soon →
-extension needed.
+### A4. Bid validity tracking (PPRA Rule 26) ✅ *(2026-11-02)*
+Rule 26: bids must be processed within their validity period.
 
-**What we have.** `CommercialOffer` carries no `validUntil` field.
-
-**What to add.** `CommercialOffer.validUntil`, a filter in `/commercial-offers`
-for "expiring in 7 days", and a background notification.
+**Shipped.** `CommercialOffer.bidValidUntil` column; the Commercial Offers
+list now shows the date with an EXPIRED pill when past. Admin can extend
+validity via **POST /api/commercial-offers/[id]/bid-validity**. A new
+page **/commercial-offers/overdue-validity** lists offers currently past
+validity.
 
 ### A5. Standard Bidding Documents (PPRA Rule 23(4)) ✅ *(2026-11-02)*
 Rule 23(4): procuring agencies "shall use" standard bidding documents
@@ -93,21 +93,24 @@ signedByBuyerOn, signedBySupplierOn, documentKey }`, enforced in
 UI at **/compliance/integrity-pacts** (list + register + record
 counter-signature).
 
-### A7. Methods of advertisement with threshold enforcement (PPRA Rule 12) ⚠️
-`Advertisement` exists (new in this release) but we don't enforce "newspaper
-required when > 3M" nor "PPRA website required when > 500k".
+### A7. Methods of advertisement with threshold enforcement (PPRA Rule 12) ✅ *(2026-11-02)*
+Rule 12: procurement > PKR 500,000 on the PPRA website; > PKR 3,000,000 also
+in at least one widely-circulated newspaper.
 
-**What to add.** On `/execution/advertisements/new` for an indent > 3M, require
-**two** entries (PPRA_WEBSITE + NEWSPAPER). Compliance rule: at least one
-PPRA_WEBSITE row for every indent > 500k that reached `IT_DISPATCHED`.
+**Shipped.** `preAwardCompliance.assertAdvertisementCoverage(indentId)`
+raises a 400 ValidationError if the indent's recorded `Advertisement`
+rows do not cover the thresholds for its estimated value. The guard is
+wired into `DispatchITUseCase` so dispatch refuses while advertisement
+coverage is insufficient.
 
-### A8. Response-time enforcement (PPRA Rule 13) ⚠️
-Rule 13: ≥ 15 days NCB, ≥ 45 days ICB between advertisement publication and
-bid submission deadline.
+### A8. Response-time enforcement (PPRA Rule 13) ✅ *(2026-11-02)*
+Rule 13: ≥ 15 days NCB, ≥ 45 days ICB between advertisement publication
+and bid submission deadline.
 
-**What to add.** On IT dispatch, read the Advertisement's `publishedOn` for
-the same indent and refuse / warn when `closingAt - publishedOn < 15d`
-(or 45d for ICB).
+**Shipped.** `preAwardCompliance.assertResponseTime(indentId, closingAt)`
+compares `closingAt` with the earliest Advertisement's `publishedOn` and
+raises when the gap is less than 15 or 45 days (based on
+`Indent.isInternational`). The guard is wired into `DispatchITUseCase`.
 
 ### A9. Blacklisting (PPRA Rule 19) ✅ *(2026-11-02)*
 Rule 19 defines blacklisting authorities, grounds, and a formal review
@@ -124,12 +127,18 @@ into `IssuePRUseCase`. UI at **/compliance/blacklists**.
 `openCommercialOffer` so a blacklisted firm is refused earlier in the
 pipeline, not only at PR issue.
 
-### A10. Rejection of all bids / re-bidding (PPRA Rules 33–34) ❌
-Rule 33 permits rejection of all bids; Rule 34 defines re-bidding (and makes
-it an auditable event).
+### A10. Rejection of all bids / re-bidding (PPRA Rules 33–34) ✅ *(2026-11-02)*
+Rule 33 permits rejection of all bids; Rule 34 defines re-bidding.
 
-**What to add.** On the IT detail page, a "Reject all offers" action that
-pivots the indent to `IT_PREPARATION` with a reason, and keeps a `RejectAllRecord`.
+**Shipped.** `rebiddingService.rejectAllOffersAndReopen(itPerformaId,
+reason)` moves every non-terminal technical and commercial offer to
+REJECTED, closes the IT, and returns the indent to IT_PREPARATION — all
+in one transaction, with an `AuditLog` entry capturing the reason and
+affected counts. UI: inline "Reject all + re-bid" button on each
+DISPATCHED IT in **/it-proformas** (requires a 10+ char reason).
+
+**Still to do.** Expose "re-bid" as a specific IT lifecycle event rather
+than a plain re-prep (keep a link to the superseded IT for audit).
 
 ### A11. Grievance Redressal Committee (PPRA Rules 48, 50) ✅ *(2026-11-02)*
 Rule 48/50: GRC of odd-number members; written complaints; GRC decides within

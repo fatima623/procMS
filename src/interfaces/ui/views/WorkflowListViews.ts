@@ -62,6 +62,7 @@ export interface CommercialOfferRow {
   readonly totalPriceMinor: string;
   readonly currency: string;
   readonly bidSecurityMinor: string | null;
+  readonly bidValidUntil: string | null;
   readonly deliveryWeeks: number | null;
   readonly openedAt: string;
 }
@@ -87,6 +88,7 @@ export async function listCommercialOffers(): Promise<readonly CommercialOfferRo
     totalPriceMinor: decimalToMinor(r.totalPrice).toString(),
     currency: r.currency,
     bidSecurityMinor: r.bidSecurityAmount ? decimalToMinor(r.bidSecurityAmount).toString() : null,
+    bidValidUntil: r.bidValidUntil?.toISOString() ?? null,
     deliveryWeeks: r.deliveryWeeks,
     openedAt: r.openedAt.toISOString(),
   }));
