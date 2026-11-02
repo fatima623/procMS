@@ -6,6 +6,7 @@ import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { MoneyLabel } from '@/interfaces/ui/components/Money';
 import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
+import { IssueTakingOverButton } from './IssueTakingOverButton';
 
 export const metadata = { title: 'Contracts • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -39,6 +40,7 @@ export default async function ContractsPage() {
                 <th>Taking-over</th>
                 <th>Closed</th>
                 <th className="right">BGs / Inv / Pay / LC</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -54,6 +56,9 @@ export default async function ContractsPage() {
                   <td><DateLabel iso={r.takingOverCertifiedOn} /></td>
                   <td><DateLabel iso={r.closedOn} /></td>
                   <td className="right mono">{r.guaranteeCount} / {r.invoiceCount} / {r.paymentCount} / {r.lcCount}</td>
+                  <td className="right">
+                    {!r.takingOverCertifiedOn && (r.status === 'SIGNED' || r.status === 'IN_PROGRESS') && <IssueTakingOverButton contractId={r.id} />}
+                  </td>
                 </tr>
               ))}
             </tbody>

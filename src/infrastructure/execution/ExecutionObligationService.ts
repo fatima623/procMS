@@ -1,6 +1,7 @@
 import { ulid } from 'ulid';
 import { DiscrepancyStatus } from '@prisma/client';
 import { prisma } from '@/infrastructure/db/prisma';
+import { decimalToMinor } from '@/infrastructure/common/decimal';
 import { NotFoundError, ValidationError } from '@/domain/errors/DomainError';
 import type {
   ExtendDPInput,
@@ -50,12 +51,40 @@ export const executionObligations = {
 
   // --- Liquidated Damages (DPP&I-35 Ch XIII) ----------------------------------
 
-  async assessLD(assessedByUserId: string, input: AssessLDInput): Promise<{ id: string }> {
-    const contract = await prisma.contract.findUnique({ where: { id: input.contractId }, select: { id: true, value: true, currency: true } });
+  async assessLD(assessedByUserId: string, input: AssessLDInput): Promise<{ id: string; capExceeded: boolean }> {
+    const contract = await prisma.contract.findUnique({
+      where: { id: input.contractId },
+      select: { id: true, value: true, currency: true, liquidatedDamages: { select: { amount: true, waivedAmount: true } } },
+    });
     if (!contract) throw new NotFoundError('Contract', input.contractId);
     if (input.periodTo.getTime() < input.periodFrom.getTime()) {
       throw new ValidationError('periodTo must be on or after periodFrom');
     }
+    if (input.currency !== contract.currency) {
+      throw new ValidationError(`LD currency ${input.currency} must match contract currency ${contract.currency}`);
+    }
+
+    // DPP&I-35 Ch XIII — LD assessed on a contract is capped at 10% of its value.
+    // We compute the running total (previous net LD + this proposed net LD) and
+    // refuse the assessment when the running total would exceed the cap.
+    const contractValueMinor = decimalToMinor(contract.value);
+    const capMinor = (contractValueMinor * 10n) / 100n;
+    const priorNetMinor = contract.liquidatedDamages.reduce((sum, ld) => {
+      const amt = decimalToMinor(ld.amount);
+      const waived = ld.waivedAmount ? decimalToMinor(ld.waivedAmount) : 0n;
+      return sum + (amt - waived);
+    }, 0n);
+    const thisNetMinor =
+      decimalToMinor(input.amount) -
+      (input.waivedAmount ? decimalToMinor(input.waivedAmount) : 0n);
+    const projectedMinor = priorNetMinor + thisNetMinor;
+    const capExceeded = projectedMinor > capMinor;
+    if (capExceeded) {
+      throw new ValidationError(
+        `LD cap exceeded (DPP&I-35 Ch XIII): net LD ${projectedMinor.toString()} > 10% of contract (${capMinor.toString()}). Waive down or reduce.`,
+      );
+    }
+
     const id = ulid();
     await prisma.liquidatedDamages.create({
       data: {
@@ -72,7 +101,46 @@ export const executionObligations = {
         assessedByUserId,
       },
     });
-    return { id };
+    return { id, capExceeded: false };
+  },
+
+  /**
+   * Running net LD outstanding on a contract (amount − waived). Used by the
+   * Payment-record form so cashiers can see what should be deducted.
+   */
+  async outstandingLDMinor(contractId: string): Promise<bigint> {
+    const rows = await prisma.liquidatedDamages.findMany({
+      where: { contractId },
+      select: { amount: true, waivedAmount: true },
+    });
+    return rows.reduce((sum, ld) => {
+      const amt = decimalToMinor(ld.amount);
+      const waived = ld.waivedAmount ? decimalToMinor(ld.waivedAmount) : 0n;
+      return sum + (amt - waived);
+    }, 0n);
+  },
+
+  /**
+   * Issue the Taking-Over Certificate for a contract. Refuses while any
+   * discrepancy is OPEN on an inspection of that contract (DPP&I-35 Ch XVI).
+   */
+  async issueTakingOverCertificate(contractId: string, certifiedOn: Date): Promise<void> {
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { id: true, takingOverCertifiedOn: true, status: true },
+    });
+    if (!contract) throw new NotFoundError('Contract', contractId);
+    if (contract.takingOverCertifiedOn) {
+      throw new ValidationError('Taking-Over Certificate already issued for this contract');
+    }
+    await this.assertNoOpenDiscrepancies(contractId);
+    await prisma.contract.update({
+      where: { id: contractId },
+      data: {
+        takingOverCertifiedOn: certifiedOn,
+        status: contract.status === 'SIGNED' || contract.status === 'IN_PROGRESS' ? 'COMPLETED' : contract.status,
+      },
+    });
   },
 
   // --- Inspection (DPP&I-35 Ch XVI) -------------------------------------------

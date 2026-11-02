@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -12,7 +12,28 @@ interface InvoiceRef {
   readonly currency: string;
 }
 
-export function PaymentForm({ invoices }: { readonly invoices: readonly InvoiceRef[] }) {
+function minorToMajor(minor: string, dp = 2): string {
+  try {
+    const n = BigInt(minor);
+    const sign = n < 0n ? '-' : '';
+    const abs = n < 0n ? -n : n;
+    const major = (abs / 10_000n).toString();
+    const frac = (abs % 10_000n).toString().padStart(4, '0').slice(0, dp);
+    return `${sign}${major}.${frac}`;
+  } catch {
+    return '0.00';
+  }
+}
+
+export function PaymentForm({
+  invoices,
+  outstandingLDByContract,
+  invoiceToContract,
+}: {
+  readonly invoices: readonly InvoiceRef[];
+  readonly outstandingLDByContract: Record<string, string>;
+  readonly invoiceToContract: Record<string, string>;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -20,6 +41,14 @@ export function PaymentForm({ invoices }: { readonly invoices: readonly InvoiceR
   const [paidOn, setPaidOn] = useState(new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState('0.00');
   const [currency, setCurrency] = useState(invoices[0]?.currency ?? 'PKR');
+
+  const outstandingForSelection = useMemo(() => {
+    const contractId = invoiceToContract[invoiceId];
+    if (!contractId) return null;
+    const minor = outstandingLDByContract[contractId];
+    if (!minor || minor === '0') return null;
+    return { minor, major: minorToMajor(minor) };
+  }, [invoiceId, invoiceToContract, outstandingLDByContract]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +87,14 @@ export function PaymentForm({ invoices }: { readonly invoices: readonly InvoiceR
           {invoices.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} — {i.firmName} ({i.contractNumber})</option>)}
         </select>
       </div>
+
+      {outstandingForSelection && (
+        <div className="card" style={{ padding: 12, marginBottom: 12, background: 'var(--warn-bg, #fff7e6)' }}>
+          <strong>Outstanding LD on this contract:</strong> {outstandingForSelection.major} {currency}.
+          Deduct this from the payment before release (DPP&amp;I-35 Ch XIII).
+        </div>
+      )}
+
       <div className="field">
         <label htmlFor="paidOn">Paid on</label>
         <input id="paidOn" className="input" type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} required />
