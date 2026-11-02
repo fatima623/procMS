@@ -96,12 +96,11 @@ just use `procMS`.
 **Branch:** `feat/admin-workflows` (not `feat/ui-ux`). Pull it and build on the three guards
 already added. The remaining top-priority items from `docs/DOCTRINE_GAPS.md § D` are:
 
-1. **B1 — DP extensions + Liquidated Damages** (DPP&I-35 Ch XIII). Models
-   `DeliveryPeriod { contractId, originalDP, extendedDP, extensionReason, grantedByUserId,
-   grantedOn }` and `LiquidatedDamages { contractId, assessedOn, amountMinor, basis }`. UI on
-   `/execution/contracts/[id]/dp`. Rule: LD typically 2% per month of delay, capped at 10%.
-2. **B2 — Inspection reports + discrepancies** (DPP&I-35 Ch XVI). Gates the Taking-Over
-   Certificate on `Contract`. Models `Inspection` and `Discrepancy`; UI under `/inspection`.
+1. **~~B1 — DP extensions + LD~~** ✅ shipped on `feat/admin-workflows` (commit after `9d313d8`).
+   Still to do: auto-compute 10% cap, and offset LD from Payment amounts.
+2. **~~B2 — Inspection reports + discrepancies~~** ✅ shipped on `feat/admin-workflows`.
+   Still to do: a dedicated `IssueTakingOverCertificate` use-case on `Contract` that calls
+   `executionObligations.assertNoOpenDiscrepancies(contractId)`.
 3. **Wider blacklist guard integration.** The guard is only in `IssuePRUseCase` today — also
    hook it into IT invite creation and `OpenCommercialOfferUseCase` so a blacklisted firm is
    refused earlier.
@@ -109,6 +108,7 @@ already added. The remaining top-priority items from `docs/DOCTRINE_GAPS.md § D
 5. **Seeding** — the ZeroLink gap note still applies: only ~4 of 23 seeded indents reach
    award + execution; seed more cases through to Contract/Invoice/Payment so execution rules
    stop being `NOT_EVALUABLE`.
+6. **Pre-qualification of firms** (A3) — the next big chapter from `DOCTRINE_GAPS.md`.
 
 Other sensible UI/UX targets that remain unchanged from the earlier handoff:
 - **Approval chain screen** (`src/app/(app)/approvals/…`)
@@ -131,8 +131,11 @@ award → execution so the execution-stage rules stop being `NOT_EVALUABLE` (onl
 ## Quick facts
 - **Working branch:** `feat/admin-workflows` (superseded `feat/ui-ux`). `main` stays releasable.
 - **Run it:** `npm install && npx prisma migrate dev && npm run seed && npm run dev` → `http://localhost:3000` (companion tests used `-p 3200`).
-- **New migration to apply after pull:** `20261102120000_add_compliance_controls` — adds the
-  `Blacklist`, `IntegrityPact` and `Grievance` tables. Run `npx prisma migrate dev` once.
+- **New migrations to apply after pull:**
+  - `20261102120000_add_compliance_controls` — Blacklist, IntegrityPact, Grievance tables.
+  - `20261102140000_add_execution_obligations` — DeliveryPeriodExtension, LiquidatedDamages,
+    Inspection, Discrepancy tables + `Contract.originalDP` column.
+  Run `npx prisma migrate dev` once after pulling.
 - **Before commit:** `npm run typecheck`, `npm test`.
 - **Push target:** `git push origin feat/admin-workflows` (on this office machine the remote is
   named `remote`, so `git push remote feat/admin-workflows`; a fresh `procMS` clone names it `origin`).

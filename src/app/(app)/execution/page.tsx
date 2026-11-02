@@ -18,7 +18,7 @@ const ICON = {
 
 export default async function ExecutionHubPage() {
   await requireRoles([Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF]);
-  const [adCount, contractCount, guaranteeCount, invoiceCount, paymentCount, lcCount, lcAmendCount] = await Promise.all([
+  const [adCount, contractCount, guaranteeCount, invoiceCount, paymentCount, lcCount, lcAmendCount, dpExtCount, ldCount, inspectionCount] = await Promise.all([
     prisma.advertisement.count(),
     prisma.contract.count(),
     prisma.guarantee.count(),
@@ -26,16 +26,22 @@ export default async function ExecutionHubPage() {
     prisma.payment.count(),
     prisma.letterOfCredit.count(),
     prisma.lCAmendment.count(),
+    prisma.deliveryPeriodExtension.count(),
+    prisma.liquidatedDamages.count(),
+    prisma.inspection.count(),
   ]);
 
   const tiles: { href: string; label: string; count: number; icon: JSX.Element; sub: string }[] = [
-    { href: '/execution/advertisements', label: 'Advertisements',  count: adCount,         icon: ICON.mega,   sub: 'PPRA Rule 12 publications' },
-    { href: '/execution/contracts',       label: 'Contracts',       count: contractCount,   icon: ICON.doc,    sub: 'DPP&I-35 Chapter XII' },
-    { href: '/execution/guarantees',      label: 'Bank guarantees', count: guaranteeCount,  icon: ICON.shield, sub: 'Chapter XV: PBG, APG, bid security' },
-    { href: '/execution/invoices',        label: 'Invoices',        count: invoiceCount,    icon: ICON.doc,    sub: 'Running bills & invoices' },
-    { href: '/execution/payments',        label: 'Payments',        count: paymentCount,    icon: ICON.wallet, sub: 'Payment releases' },
-    { href: '/execution/lcs',             label: 'Letters of Credit', count: lcCount,       icon: ICON.lc,     sub: 'Chapter XIV: imports' },
-    { href: '/execution/lc-amendments',   label: 'LC amendments',   count: lcAmendCount,    icon: ICON.lc,     sub: 'LC extensions / changes' },
+    { href: '/execution/advertisements',      label: 'Advertisements',   count: adCount,         icon: ICON.mega,   sub: 'PPRA Rule 12 publications' },
+    { href: '/execution/contracts',           label: 'Contracts',        count: contractCount,   icon: ICON.doc,    sub: 'DPP&I-35 Chapter XII' },
+    { href: '/execution/guarantees',          label: 'Bank guarantees',  count: guaranteeCount,  icon: ICON.shield, sub: 'Chapter XV: PBG, APG, bid security' },
+    { href: '/execution/dp-extensions',       label: 'DP extensions',    count: dpExtCount,      icon: ICON.doc,    sub: 'Chapter XIII — delivery period' },
+    { href: '/execution/liquidated-damages',  label: 'Liquidated damages', count: ldCount,       icon: ICON.wallet, sub: 'Chapter XIII — 2% / month, 10% cap' },
+    { href: '/execution/inspections',         label: 'Inspections',      count: inspectionCount, icon: ICON.doc,    sub: 'Chapter XVI — gates Taking-Over' },
+    { href: '/execution/invoices',            label: 'Invoices',         count: invoiceCount,    icon: ICON.doc,    sub: 'Running bills & invoices' },
+    { href: '/execution/payments',            label: 'Payments',         count: paymentCount,    icon: ICON.wallet, sub: 'Payment releases' },
+    { href: '/execution/lcs',                 label: 'Letters of Credit',count: lcCount,         icon: ICON.lc,     sub: 'Chapter XIV: imports' },
+    { href: '/execution/lc-amendments',       label: 'LC amendments',    count: lcAmendCount,    icon: ICON.lc,     sub: 'LC extensions / changes' },
   ];
 
   return (

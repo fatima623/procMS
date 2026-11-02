@@ -147,23 +147,38 @@ docs for a given indent that has a `Contract` and no `withholdingApprovedBy`.
 
 ## B. Execution — currently missing
 
-### B1. Delivery Period & Liquidated Damages (DPP&I-35 Ch XIII) ❌
+### B1. Delivery Period & Liquidated Damages (DPP&I-35 Ch XIII) ✅ *(2026-11-02)*
 Chapter XIII (pp. 103–108): LD = (typically) 2% per month of delay, capped at
 10% of contract value; the DP(Navy) may extend DP on cause.
 
-**What to add.**
-- `DeliveryPeriod { contractId, originalDP, extendedDP, extensionReason, grantedByUserId, grantedOn }`
-- `LiquidatedDamages { contractId, assessedOn, amountMinor, basis }`
-- Admin page `/execution/contracts/[id]/dp` with "Extend DP" and "Assess LD".
+**Shipped.** `Contract.originalDP` + `DeliveryPeriodExtension { contractId,
+previousDP, newDP, reason, grantedByUserId, grantedOn, documentKey }` chain
+(each extension carries the previous DP for audit), and `LiquidatedDamages
+{ contractId, assessedOn, periodFrom, periodTo, basis (PER_DAY | PER_WEEK |
+PER_MONTH | LUMP_SUM), amount, currency, waivedAmount, waivedReason,
+assessedByUserId }`. UI at **/execution/dp-extensions** and
+**/execution/liquidated-damages**.
 
-### B2. Inspection reports & discrepancies (DPP&I-35 Ch XVI) ❌
+**Still to do.** Compute the 10%-of-contract-value cap automatically and
+flag assessments that breach it; integrate the LD policy with Payment
+amounts (deduct outstanding LD from the next payment).
+
+### B2. Inspection reports & discrepancies (DPP&I-35 Ch XVI) ✅ *(2026-11-02)*
 Chapter XVI (pp. 119–127): inspection by the Inspectorate, acceptance or
 discrepancy; discrepancy loop closes before Taking-Over Certificate.
 
-**What to add.**
-- `Inspection { contractId, performedByUserId, performedOn, verdict: ACCEPTED|DISCREPANCY, notes, documentKey }`
-- `Discrepancy { inspectionId, raisedOn, resolvedOn, resolutionNotes }`
-- Inspectorate page under `/inspection`.
+**Shipped.** `Inspection { contractId, performedByUserId, performedOn,
+verdict (ACCEPTED | DISCREPANCY | REJECTED), summary, documentKey }` and
+`Discrepancy { inspectionId, raisedOn, description, severity (MINOR / MAJOR
+/ CRITICAL), status (OPEN | RESOLVED | WAIVED), resolvedOn, resolutionNotes }`.
+UI at **/execution/inspections** with inline "+ Discrepancy" and
+"Resolve / Waive" buttons. Helper `executionObligations.assertNoOpenDiscrepancies(contractId)`
+is wired into the service — ready to call from a future
+`IssueTakingOverCertificate` use-case.
+
+**Still to do.** Add a `TakingOverCertificate` use-case on `Contract` that
+calls the assertion; today the field is set by hand on the admin create
+form for `Contract`.
 
 ### B3. Insurance (DPP&I-35 Ch XVII) ❌
 Chapter XVII (pp. 128–132): for imports, marine + war risk insurance.

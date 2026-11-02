@@ -857,6 +857,7 @@ model Contract {
   currency              String                  @default("PKR") @db.VarChar(3)
   awardedOn             DateTime?               @db.Date
   signedOn              DateTime?               @db.Date
+  originalDP            DateTime?               @db.Date // original delivery period (DPP&I-35 Ch XIII)
   status                ExecutionContractStatus @default(SIGNED)
   takingOverCertifiedOn DateTime?               @db.Date // taking-over certificate issued
   closedOn              DateTime?               @db.Date // contract formally closed
@@ -868,10 +869,13 @@ model Contract {
   firm                Firm                 @relation(fields: [firmId], references: [id])
   purchaseRequisition PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
 
-  guarantees      Guarantee[]
-  invoices        Invoice[]
-  payments        Payment[]
-  lettersOfCredit LetterOfCredit[]
+  guarantees        Guarantee[]
+  invoices          Invoice[]
+  payments          Payment[]
+  lettersOfCredit   LetterOfCredit[]
+  dpExtensions      DeliveryPeriodExtension[]
+  liquidatedDamages LiquidatedDamages[]
+  inspections       Inspection[]
 
   @@index([firmId])
   @@index([status])
@@ -1064,4 +1068,105 @@ model Grievance {
 
   @@index([indentId, status])
   @@index([status, filedOn])
+}
+
+// =============================================================================
+// Execution-stage obligations (DPP&I-35 Ch XIII delivery period + LD; Ch XVI
+// inspection + discrepancies).
+//
+//   - DeliveryPeriodExtension — a formal extension of the contractual DP,
+//     recorded with reason, authority, and the new DP date.
+//   - LiquidatedDamages      — assessment against the supplier for a delay.
+//     Typically 2% per month of delay, capped at 10% of contract value.
+//   - Inspection             — Inspectorate check of delivered stores.
+//                              The outcome gates the Taking-Over Certificate.
+//   - Discrepancy            — a specific defect raised during an Inspection
+//                              and resolved before closure.
+// =============================================================================
+
+model DeliveryPeriodExtension {
+  id              String   @id @db.VarChar(26)
+  contractId      String   @db.VarChar(26)
+  previousDP      DateTime @db.Date
+  newDP           DateTime @db.Date
+  reason          String   @db.Text
+  grantedByUserId String   @db.VarChar(26)
+  grantedOn       DateTime @db.Date
+  documentKey     String?  @db.VarChar(500)
+  createdAt       DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, grantedOn])
+}
+
+enum LDBasis {
+  PER_DAY     // amount per day of delay
+  PER_WEEK    // amount per week of delay
+  PER_MONTH   // amount per month of delay (DPP&I-35 default)
+  LUMP_SUM
+}
+
+model LiquidatedDamages {
+  id            String   @id @db.VarChar(26)
+  contractId    String   @db.VarChar(26)
+  assessedOn    DateTime @db.Date
+  periodFrom    DateTime @db.Date // start of the delay window
+  periodTo      DateTime @db.Date // end of the delay window
+  basis         LDBasis  @default(PER_MONTH)
+  amount        Decimal  @db.Decimal(20, 4) // the LD amount assessed
+  currency      String   @default("PKR") @db.VarChar(3)
+  waivedAmount  Decimal? @db.Decimal(20, 4) // waiver / discount granted
+  waivedReason  String?  @db.Text
+  assessedByUserId String @db.VarChar(26)
+  createdAt     DateTime @default(now()) @db.DateTime(6)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId, assessedOn])
+}
+
+enum InspectionVerdict {
+  ACCEPTED
+  DISCREPANCY
+  REJECTED
+}
+
+model Inspection {
+  id                String            @id @db.VarChar(26)
+  contractId        String            @db.VarChar(26)
+  performedByUserId String            @db.VarChar(26) // INSPECTORATE
+  performedOn       DateTime          @db.Date
+  verdict           InspectionVerdict
+  summary           String            @db.Text
+  documentKey       String?           @db.VarChar(500)
+  createdAt         DateTime          @default(now()) @db.DateTime(6)
+
+  contract      Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  discrepancies Discrepancy[]
+
+  @@index([contractId, performedOn])
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  RESOLVED
+  WAIVED
+}
+
+model Discrepancy {
+  id              String             @id @db.VarChar(26)
+  inspectionId    String             @db.VarChar(26)
+  raisedOn        DateTime           @db.Date
+  description     String             @db.Text
+  severity        String             @db.VarChar(40) // MINOR/MAJOR/CRITICAL (open-ended for taxonomy evolution)
+  status          DiscrepancyStatus  @default(OPEN)
+  resolvedOn      DateTime?          @db.Date
+  resolutionNotes String?            @db.Text
+  createdAt       DateTime           @default(now()) @db.DateTime(6)
+  updatedAt       DateTime           @updatedAt @db.DateTime(6)
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId, status])
 }
