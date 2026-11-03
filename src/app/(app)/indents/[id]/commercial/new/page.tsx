@@ -6,10 +6,11 @@ import { NewCommercialForm } from './NewCommercialForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function NewCommercialPage({ params }: { params: { id: string } }) {
-  await requireRoles([Role.ADP_STAFF, Role.COORD_STAFF, Role.ADMIN], `/indents/${params.id}`);
+export default async function NewCommercialPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  await requireRoles([Role.ADP_STAFF, Role.COORD_STAFF, Role.ADMIN], `/indents/${id}`);
   const indent = await prisma.indent.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     select: {
       id: true, indentNumber: true, status: true,
       itPerforma: {

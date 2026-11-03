@@ -6,9 +6,10 @@ import { NewITForm } from './NewITForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function NewITPage({ params }: { params: { id: string } }) {
-  await requireRoles([Role.ADP_STAFF, Role.ADMIN], `/indents/${params.id}`);
-  const indent = await prisma.indent.findUnique({ where: { id: params.id }, select: { id: true, indentNumber: true, status: true, subject: true, itPerforma: { select: { id: true } } } });
+export default async function NewITPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  await requireRoles([Role.ADP_STAFF, Role.ADMIN], `/indents/${id}`);
+  const indent = await prisma.indent.findUnique({ where: { id: id }, select: { id: true, indentNumber: true, status: true, subject: true, itPerforma: { select: { id: true } } } });
   if (!indent) notFound();
   if (indent.itPerforma) redirect(`/indents/${indent.id}`);
   if (indent.status !== 'IT_PREPARATION') redirect(`/indents/${indent.id}`);

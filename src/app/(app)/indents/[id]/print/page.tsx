@@ -14,9 +14,10 @@ export const metadata = { title: 'Print indent' };
  * PR. Signature strip at the bottom shows the chain roles whose approval
  * matters for the current stage.
  */
-export default async function PrintIndentPage({ params }: { params: { id: string } }) {
+export default async function PrintIndentPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await requireSessionCtx();
-  const indent = await loadIndentDetail(params.id);
+  const indent = await loadIndentDetail(id);
   if (!indent) notFound();
 
   return (

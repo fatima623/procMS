@@ -21,10 +21,11 @@ const H_ICON = {
   firm:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21V12h6v9"/></svg>,
 };
 
-export default async function EditUserPage({ params }: { params: { id: string } }) {
+export default async function EditUserPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireRoles([Role.ADMIN]);
   const [user, sections, firms] = await Promise.all([
-    service.get(ctx, params.id).catch((e) => {
+    service.get(ctx, id).catch((e) => {
       if (e instanceof NotFoundError) return null;
       throw e;
     }),

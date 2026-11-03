@@ -39,17 +39,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (body.openRiskPurchaseCase) {
         const existing = await tx.riskPurchaseCase.findUnique({ where: { originalContractId: id }, select: { id: true } });
         if (!existing) {
-          const id = ulid();
+          const newRiskPurchaseId = ulid();
           await tx.riskPurchaseCase.create({
             data: {
-              id,
+              id: newRiskPurchaseId,
               originalContractId: id,
               triggerReason: body.terminationReason,
               initiatedOn: body.initiatedOn,
               initiatedByUserId: ctx.userId,
             },
           });
-          riskPurchaseId = id;
+          riskPurchaseId = newRiskPurchaseId;
         } else {
           riskPurchaseId = existing.id;
         }

@@ -17,9 +17,10 @@ const H_ICON = {
   clock:   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
 };
 
-export default async function TSRDetailPage({ params }: { params: { id: string } }) {
+export default async function TSRDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireSessionCtx();
-  const tsr = await loadTSRDetail(params.id);
+  const tsr = await loadTSRDetail(id);
   if (!tsr) notFound();
 
   const canEdit = (ctx.roles.includes(Role.INSPECTORATE) || ctx.roles.includes(Role.ADMIN)) && tsr.status !== 'COMPLETED';

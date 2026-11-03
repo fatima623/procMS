@@ -5,11 +5,12 @@ import { SubmitOfferForm } from './SubmitOfferForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SubmitOfferPage({ params }: { params: { itId: string } }) {
+export default async function SubmitOfferPage({ params }: { params: Promise<{ itId: string }> }) {
+  const { itId } = await params;
   const ctx = await requireSessionCtx();
   if (!ctx.firmId) redirect('/dashboard');
   const it = await prisma.iTPerforma.findUnique({
-    where: { id: params.itId },
+    where: { id: itId },
     include: { firms: true, indent: { select: { subject: true } }, technicalOffers: { where: { firmId: ctx.firmId }, select: { id: true } } },
   });
   if (!it) notFound();

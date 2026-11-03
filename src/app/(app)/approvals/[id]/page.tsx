@@ -17,10 +17,11 @@ const H_ICON = {
 
 export const dynamic = 'force-dynamic';
 
-export default async function ApprovalDetailPage({ params }: { params: { id: string } }) {
+export default async function ApprovalDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireSessionCtx();
   const chain = await prisma.approvalChain.findUnique({
-    where: { id: params.id },
+    where: { id: id },
     include: { steps: { include: { decidedBy: true }, orderBy: { stepIndex: 'asc' } } },
   });
   if (!chain) notFound();

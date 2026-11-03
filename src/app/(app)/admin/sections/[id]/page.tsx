@@ -18,12 +18,13 @@ const H_ICON = {
   check:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4L19 6"/></svg>,
 };
 
-export default async function EditSectionPage({ params }: { params: { id: string } }) {
+export default async function EditSectionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireRoles([Role.ADMIN]);
   const [section, parents, memberCount] = await Promise.all([
-    service.get(ctx, params.id).catch((e) => { if (e instanceof NotFoundError) return null; throw e; }),
-    prisma.section.findMany({ where: { id: { not: params.id } }, orderBy: { code: 'asc' }, select: { id: true, code: true, name: true } }),
-    prisma.sectionMember.count({ where: { sectionId: params.id } }),
+    service.get(ctx, id).catch((e) => { if (e instanceof NotFoundError) return null; throw e; }),
+    prisma.section.findMany({ where: { id: { not: id } }, orderBy: { code: 'asc' }, select: { id: true, code: true, name: true } }),
+    prisma.sectionMember.count({ where: { sectionId: id } }),
   ]);
   if (!section) notFound();
   const activeAccent: Accent = section.isActive ? 'emerald' : 'coral';

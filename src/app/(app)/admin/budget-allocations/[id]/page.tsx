@@ -18,9 +18,10 @@ const H_ICON = {
   flame:  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 20a6 6 0 0012 0c0-4-3-5-3-8 0-3-2-5-4-6 1 3-1 5-3 7-2 2-2 5 0 7-2 0-2-2-2-4"/></svg>,
 };
 
-export default async function EditAllocationPage({ params }: { params: { id: string } }) {
+export default async function EditAllocationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const ctx = await requireRoles([Role.ADMIN]);
-  const row = await service.get(ctx, params.id).catch((e) => { if (e instanceof NotFoundError) return null; throw e; });
+  const row = await service.get(ctx, id).catch((e) => { if (e instanceof NotFoundError) return null; throw e; });
   if (!row) notFound();
   const toDecimal = (minor: string): string => {
     const n = BigInt(minor);
