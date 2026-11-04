@@ -397,8 +397,12 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log('[seed] users…');
   const usersCache: UserCache = {};
-  usersCache.admin     = await upsertUser('admin@dp.navy',      'System Administrator', [Role.ADMIN], []);
-  usersCache.admin2    = await upsertUser('admin2@dp.navy',     'Fatima Khan (Admin)',  [Role.ADMIN], []);
+  // Admins belong to FLEET-HQ so they can also create indents from the admin
+  // account during walkthroughs — removing them from sections hard-fails the
+  // CreateIndentUseCase, which derives the owning section from the user's
+  // first membership.
+  usersCache.admin     = await upsertUser('admin@dp.navy',      'System Administrator', [Role.ADMIN], ['FLEET-HQ']);
+  usersCache.admin2    = await upsertUser('admin2@dp.navy',     'Fatima Khan (Admin)',  [Role.ADMIN], ['FLEET-HQ']);
 
   usersCache.indenter  = await upsertUser('indenter@dp.navy',   'Lt Cdr A. Khan',       [Role.INDENTER], ['FLEET-HQ'],     { rank: 'Lt Cdr' });
   usersCache.indenter2 = await upsertUser('indenter2@dp.navy',  'Lt S. Ahmed',          [Role.INDENTER], ['FLEET-KHI'],    { rank: 'Lt' });
