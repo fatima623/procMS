@@ -58,8 +58,24 @@ function oidcProvider() {
   };
 }
 
+// LAN / HTTP-only deployments (dev + shared-host demo) cannot use `Secure`
+// cookies — the browser silently drops them on non-HTTPS origins, so sign-in
+// appears to succeed but the session cookie never lands. We detect this from
+// NEXTAUTH_URL and pin the cookie config explicitly. In a real HTTPS deploy
+// (NEXTAUTH_URL starts with https://), we fall back to Auth.js defaults
+// which prefix with __Secure- and set Secure: true.
+const isHttpAuthUrl = (process.env.NEXTAUTH_URL ?? 'http://localhost:3000').startsWith('http://');
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  useSecureCookies: !isHttpAuthUrl,
+  ...(isHttpAuthUrl ? {
+    cookies: {
+      sessionToken:   { name: 'authjs.session-token',   options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false } },
+      callbackUrl:    { name: 'authjs.callback-url',    options: { sameSite: 'lax', path: '/', secure: false } },
+      csrfToken:      { name: 'authjs.csrf-token',      options: { httpOnly: true, sameSite: 'lax', path: '/', secure: false } },
+    },
+  } : {}),
   session: { strategy: 'jwt', maxAge: 14 * 24 * 60 * 60, updateAge: 2 * 60 * 60 },
   providers: ([
     oidcProvider(),
