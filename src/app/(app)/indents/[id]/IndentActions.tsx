@@ -4,6 +4,67 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Role } from '@prisma/client';
 
+/**
+ * COORD picks a Concerned ADP from the list the server passed in and posts
+ * the choice. Kept inline so IndentActions stays one file.
+ */
+function AssignToAdpControl(props: {
+  readonly indentId: string;
+  readonly adpSections: ReadonlyArray<{ id: string; code: string; name: string }>;
+  readonly onDone: () => void;
+  readonly onError: (msg: string) => void;
+}) {
+  const [adpSectionId, setAdpSectionId] = useState<string>(props.adpSections[0]?.id ?? '');
+  const [busy, setBusy] = useState(false);
+  if (props.adpSections.length === 0) {
+    return <div className="muted">No active ADP sections found — ask admin to create one.</div>;
+  }
+  async function submit() {
+    if (!adpSectionId) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/indents/${props.indentId}/assign-adp`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ adpSectionId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error?.message ?? `HTTP ${res.status}`);
+      }
+      props.onDone();
+    } catch (e) {
+      props.onError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="stack-sm">
+      <label className="dim" htmlFor="adp-section-select">Concerned ADP section</label>
+      <select
+        id="adp-section-select"
+        className="input"
+        value={adpSectionId}
+        onChange={(e) => setAdpSectionId(e.target.value)}
+        disabled={busy}
+      >
+        {props.adpSections.map((s) => (
+          <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+        ))}
+      </select>
+      <button
+        className="btn btn-primary"
+        onClick={submit}
+        disabled={busy || !adpSectionId}
+        style={{ width: '100%', justifyContent: 'center' }}
+      >
+        {busy ? '…' : 'Assign to ADP'}
+      </button>
+    </div>
+  );
+}
+
 type ActionFn = () => Promise<Response>;
 
 export function IndentActions(props: {
@@ -16,6 +77,7 @@ export function IndentActions(props: {
   readonly cstId: string | null;
   readonly prId: string | null;
   readonly prStatus: string | null;
+  readonly adpSections: ReadonlyArray<{ id: string; code: string; name: string }>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -70,6 +132,70 @@ export function IndentActions(props: {
       show: true,
       variant: 'primary',
       onClick: () => run('forward-budget', post(`/api/indents/${props.indentId}/forward-to-budget`)),
+    });
+  }
+
+  // Budget Section verifies / rejects.
+  if (props.status === 'BUDGET_CHECK' && (has(Role.BUDGET_STAFF) || isAdmin)) {
+    actions.push({
+      label: 'Verify budget',
+      show: true,
+      variant: 'primary',
+      onClick: () => run('verify-budget', post(`/api/indents/${props.indentId}/verify-budget`)),
+    });
+    actions.push({
+      label: 'Reject (no funds)',
+      show: true,
+      variant: 'danger',
+      onClick: () => {
+        const reason = window.prompt('Reason for budget rejection — this closes the indent.');
+        if (!reason || !reason.trim()) return;
+        run('reject-budget', post(`/api/indents/${props.indentId}/reject-budget`, { reason }));
+      },
+    });
+  }
+
+  // COORD assigns to a Concerned ADP section. Rendered as a small dropdown
+  // beside the button because we already know the list server-side.
+  if (props.status === 'COORD_VETTING' && (has(Role.COORD_STAFF) || isAdmin)) {
+    actions.push({
+      label: 'Assign to ADP',
+      show: true,
+      onClick: () => {},
+      node: (
+        <AssignToAdpControl
+          key="assign-adp"
+          indentId={props.indentId}
+          adpSections={props.adpSections}
+          onDone={() => router.refresh()}
+          onError={setErr}
+        />
+      ),
+    });
+  }
+
+  // Concerned ADP stamps the control number. Also works from ADP_OBSERVED
+  // (post-rework), which the domain allows.
+  if ((props.status === 'ADP_VETTING' || props.status === 'ADP_OBSERVED') && (has(Role.ADP_STAFF) || isAdmin)) {
+    actions.push({
+      label: 'Assign control number',
+      show: true,
+      variant: 'primary',
+      onClick: () => {
+        const cn = window.prompt('Control number (e.g. ADP1-2026-00042). 4–40 chars, A–Z/0–9/-.');
+        if (!cn || !cn.trim()) return;
+        run('control-number', post(`/api/indents/${props.indentId}/assign-control-number`, { controlNumber: cn.trim() }));
+      },
+    });
+  }
+
+  // SUPTD approves vetting and opens the AD→DD→DP(N)→DGDP→SECY(DP) chain.
+  if (props.status === 'SUPTD_VETTING' && (has(Role.SUPTD) || isAdmin)) {
+    actions.push({
+      label: 'Approve vetting → open chain',
+      show: true,
+      variant: 'primary',
+      onClick: () => run('enter-chain', post(`/api/indents/${props.indentId}/enter-indent-approval`)),
     });
   }
 

@@ -8,6 +8,11 @@ import { rootLogger } from '../logging/pinoLogger';
 import { CreateIndentUseCase } from '@/application/indent/CreateIndentUseCase';
 import { SubmitIndentUseCase } from '@/application/indent/SubmitIndentUseCase';
 import { ForwardToBudgetUseCase } from '@/application/indent/ForwardToBudgetUseCase';
+import { VerifyBudgetUseCase } from '@/application/indent/VerifyBudgetUseCase';
+import { RejectBudgetUseCase } from '@/application/indent/RejectBudgetUseCase';
+import { AssignToADPUseCase } from '@/application/indent/AssignToADPUseCase';
+import { AssignControlNumberUseCase } from '@/application/indent/AssignControlNumberUseCase';
+import { EnterIndentApprovalUseCase } from '@/application/indent/EnterIndentApprovalUseCase';
 import { GetIndentUseCase } from '@/application/indent/GetIndentUseCase';
 import { ListIndentsUseCase } from '@/application/indent/ListIndentsUseCase';
 import { ActOnApprovalUseCase } from '@/application/approval/ActOnApprovalUseCase';
@@ -45,6 +50,11 @@ export interface Container {
   readonly createIndent: CreateIndentUseCase;
   readonly submitIndent: SubmitIndentUseCase;
   readonly forwardToBudget: ForwardToBudgetUseCase;
+  readonly verifyBudget: VerifyBudgetUseCase;
+  readonly rejectBudget: RejectBudgetUseCase;
+  readonly assignToADP: AssignToADPUseCase;
+  readonly assignControlNumber: AssignControlNumberUseCase;
+  readonly enterIndentApproval: EnterIndentApprovalUseCase;
   readonly getIndent: GetIndentUseCase;
   readonly listIndents: ListIndentsUseCase;
   readonly actOnApproval: ActOnApprovalUseCase;
@@ -97,6 +107,11 @@ export function getContainer(): Container {
     createIndent: new CreateIndentUseCase({ uow, ids, clock, logger, indentNumberGenerator }),
     submitIndent: new SubmitIndentUseCase({ uow, clock, logger }),
     forwardToBudget: new ForwardToBudgetUseCase({ uow, clock, logger }),
+    verifyBudget: new VerifyBudgetUseCase({ uow, clock, logger }),
+    rejectBudget: new RejectBudgetUseCase({ uow, clock, logger }),
+    assignToADP: new AssignToADPUseCase({ uow, clock, logger }),
+    assignControlNumber: new AssignControlNumberUseCase({ uow, clock, logger }),
+    enterIndentApproval: new EnterIndentApprovalUseCase({ uow, ids, clock, logger }),
     getIndent: new GetIndentUseCase(nonTxIndents),
     listIndents: new ListIndentsUseCase(nonTxIndents),
     actOnApproval: new ActOnApprovalUseCase({ uow, clock, logger }),

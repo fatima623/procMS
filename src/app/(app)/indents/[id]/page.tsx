@@ -11,6 +11,7 @@ import { IndentActions } from './IndentActions';
 import { Attachments } from './Attachments';
 import { Comments } from './Comments';
 import { commentService } from '@/application/comment/CommentService';
+import { prisma } from '@/infrastructure/db/prisma';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,16 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
   const ctx = await requireSessionCtx();
   const indent = await loadIndentDetail(id);
   if (!indent) notFound();
-  const comments = await commentService.listForIndent(indent.id);
+  const [comments, adpSections] = await Promise.all([
+    commentService.listForIndent(indent.id),
+    // COORD needs this list only in COORD_VETTING; loading it unconditionally
+    // keeps the server render simple and the query is tiny.
+    prisma.section.findMany({
+      where: { kind: 'ADP', isActive: true },
+      orderBy: { code: 'asc' },
+      select: { id: true, code: true, name: true },
+    }),
+  ]);
 
   const statusAccent: Accent = (['CLOSED'].includes(indent.status)) ? 'emerald'
     : (['INDENT_REJECTED', 'BUDGET_REJECTED', 'CANCELLED'].includes(indent.status)) ? 'coral'
@@ -191,6 +201,7 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
               cstId={indent.cst?.id ?? null}
               prId={indent.pr?.id ?? null}
               prStatus={indent.pr?.status ?? null}
+              adpSections={adpSections}
             />
           </section>
         </aside>
