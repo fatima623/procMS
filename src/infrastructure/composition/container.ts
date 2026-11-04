@@ -7,6 +7,7 @@ import { rootLogger } from '../logging/pinoLogger';
 
 import { CreateIndentUseCase } from '@/application/indent/CreateIndentUseCase';
 import { SubmitIndentUseCase } from '@/application/indent/SubmitIndentUseCase';
+import { ForwardToBudgetUseCase } from '@/application/indent/ForwardToBudgetUseCase';
 import { GetIndentUseCase } from '@/application/indent/GetIndentUseCase';
 import { ListIndentsUseCase } from '@/application/indent/ListIndentsUseCase';
 import { ActOnApprovalUseCase } from '@/application/approval/ActOnApprovalUseCase';
@@ -43,6 +44,7 @@ import { ResolveObservationsUseCase } from '@/application/observation/ResolveObs
 export interface Container {
   readonly createIndent: CreateIndentUseCase;
   readonly submitIndent: SubmitIndentUseCase;
+  readonly forwardToBudget: ForwardToBudgetUseCase;
   readonly getIndent: GetIndentUseCase;
   readonly listIndents: ListIndentsUseCase;
   readonly actOnApproval: ActOnApprovalUseCase;
@@ -94,6 +96,7 @@ export function getContainer(): Container {
   cached = {
     createIndent: new CreateIndentUseCase({ uow, ids, clock, logger, indentNumberGenerator }),
     submitIndent: new SubmitIndentUseCase({ uow, clock, logger }),
+    forwardToBudget: new ForwardToBudgetUseCase({ uow, clock, logger }),
     getIndent: new GetIndentUseCase(nonTxIndents),
     listIndents: new ListIndentsUseCase(nonTxIndents),
     actOnApproval: new ActOnApprovalUseCase({ uow, clock, logger }),

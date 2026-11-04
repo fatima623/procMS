@@ -62,6 +62,17 @@ export function IndentActions(props: {
     });
   }
 
+  // CR Section forwards the submitted indent to Budget. Covers both SUBMITTED
+  // (initial landing) and CR_RECEIVED (if an intake step was logged separately).
+  if ((props.status === 'SUBMITTED' || props.status === 'CR_RECEIVED') && (has(Role.CR_STAFF) || isAdmin)) {
+    actions.push({
+      label: 'Forward to Budget',
+      show: true,
+      variant: 'primary',
+      onClick: () => run('forward-budget', post(`/api/indents/${props.indentId}/forward-to-budget`)),
+    });
+  }
+
   // ADP raises an observation while the file is in ADP_VETTING
   if (props.status === 'ADP_VETTING' && (has(Role.ADP_STAFF) || isAdmin)) {
     actions.push({
