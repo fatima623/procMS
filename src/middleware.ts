@@ -46,12 +46,18 @@ export function middleware(req: NextRequest): NextResponse {
 
   const res = NextResponse.next();
   if (!cookieToken) {
+    // `Secure` must only be set on an HTTPS deploy — a cookie marked Secure
+    // on a plain-HTTP origin is silently dropped by every browser, which
+    // breaks the double-submit scheme (the client fetch wrapper then has no
+    // cookie to echo and every mutating request 403s). Mirror the NEXTAUTH_URL
+    // scheme so LAN/HTTP demos work while real HTTPS deploys stay strict.
+    const isHttps = (process.env.NEXTAUTH_URL ?? '').startsWith('https://');
     res.cookies.set(CSRF_COOKIE, generateToken(), {
       httpOnly: false,       // the client fetch wrapper must read it
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isHttps,
     });
   }
   return res;
