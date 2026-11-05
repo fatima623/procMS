@@ -6,6 +6,7 @@ import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { MoneyLabel } from '@/interfaces/ui/components/Money';
 import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
+import { WaiveLDButton } from './WaiveLDButton';
 
 export const metadata = { title: 'Liquidated Damages • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,7 @@ export default async function LDsPage() {
                 <th className="right">Amount</th>
                 <th className="right">Waived</th>
                 <th>Waiver reason</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -52,6 +54,7 @@ export default async function LDsPage() {
                   <td className="right"><MoneyLabel amountMinor={r.amountMinor} currency={r.currency} /></td>
                   <td className="right">{r.waivedAmountMinor ? <MoneyLabel amountMinor={r.waivedAmountMinor} currency={r.currency} /> : <span className="muted">—</span>}</td>
                   <td style={{ maxWidth: 240 }}>{r.waivedReason ?? <span className="muted">—</span>}</td>
+                  <td className="right"><WaiveLDButton id={r.id} currentWaivedAmountMinor={r.waivedAmountMinor} /></td>
                 </tr>
               ))}
             </tbody>

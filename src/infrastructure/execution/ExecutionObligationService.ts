@@ -105,6 +105,33 @@ export const executionObligations = {
   },
 
   /**
+   * Record a (partial or full) waiver on an existing LD. Refuses amounts
+   * greater than the assessed amount, or non-positive amounts. Overwrites
+   * any prior waiver on this row.
+   */
+  async waiveLD(id: string, input: { waivedAmount: string; waivedReason: string }): Promise<void> {
+    const ld = await prisma.liquidatedDamages.findUnique({
+      where: { id },
+      select: { id: true, amount: true, currency: true },
+    });
+    if (!ld) throw new NotFoundError('LiquidatedDamages', id);
+    const amtMinor = decimalToMinor(ld.amount);
+    const waivedMinor = decimalToMinor(input.waivedAmount);
+    if (waivedMinor <= 0n) {
+      throw new ValidationError('Waived amount must be positive');
+    }
+    if (waivedMinor > amtMinor) {
+      throw new ValidationError(
+        `Waived amount ${input.waivedAmount} exceeds assessed amount ${ld.amount.toString()}`,
+      );
+    }
+    await prisma.liquidatedDamages.update({
+      where: { id },
+      data: { waivedAmount: input.waivedAmount, waivedReason: input.waivedReason },
+    });
+  },
+
+  /**
    * Running net LD outstanding on a contract (amount − waived). Used by the
    * Payment-record form so cashiers can see what should be deducted.
    */

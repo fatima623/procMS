@@ -44,6 +44,17 @@ export const assessLDSchema = z.object({
 });
 export type AssessLDInput = z.infer<typeof assessLDSchema>;
 
+/**
+ * Post-assessment waiver — competent authority grants a (partial or full)
+ * waiver AFTER the LD was already assessed. Overwrites `waivedAmount` and
+ * `waivedReason` on the existing row.
+ */
+export const waiveLDSchema = z.object({
+  waivedAmount: money,
+  waivedReason: z.string().min(5).max(2000),
+});
+export type WaiveLDInput = z.infer<typeof waiveLDSchema>;
+
 // --- Inspection ---------------------------------------------------------------
 
 export const recordInspectionSchema = z.object({
