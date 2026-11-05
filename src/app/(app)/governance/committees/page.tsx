@@ -1,17 +1,18 @@
 import Link from 'next/link';
 import { Role } from '@prisma/client';
 import { requireRoles } from '@/interfaces/ui/auth';
-import { listCommittees } from '@/interfaces/ui/views/GovernanceViews';
+import { listCommittees, listUsersForPicker } from '@/interfaces/ui/views/GovernanceViews';
 import { DateLabel } from '@/interfaces/ui/components/DateLabel';
 import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
+import { CommitteeMembershipActions } from './CommitteeMembershipActions';
 
 export const metadata = { title: 'Committees • Procurement' };
 export const dynamic = 'force-dynamic';
 
 export default async function CommitteesPage() {
   await requireRoles([Role.ADMIN, Role.DGDP, Role.SECY_DP, Role.DP_N]);
-  const committees = await listCommittees();
+  const [committees, users] = await Promise.all([listCommittees(), listUsersForPicker()]);
   return (
     <>
       <div className="row" style={{ marginBottom: 16 }}>
@@ -64,6 +65,12 @@ export default async function CommitteesPage() {
                   ))}
                 </tbody>
               </table>
+              <CommitteeMembershipActions
+                committeeId={c.id}
+                isActive={c.isActive}
+                members={c.members}
+                users={users}
+              />
             </div>
           ))}
         </div>
