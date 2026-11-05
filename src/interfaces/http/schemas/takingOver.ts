@@ -11,3 +11,8 @@ export const issueTakingOverSchema = z.object({
   certifiedOn: dateLike,
 });
 export type IssueTakingOverInput = z.infer<typeof issueTakingOverSchema>;
+
+export const closeContractSchema = z.object({
+  closedOn: dateLike,
+});
+export type CloseContractInput = z.infer<typeof closeContractSchema>;

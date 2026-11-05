@@ -8,6 +8,7 @@ import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
 import { IssueTakingOverButton } from './IssueTakingOverButton';
 import { TerminateContractButton } from './TerminateContractButton';
+import { CloseContractButton } from './CloseContractButton';
 
 export const metadata = { title: 'Contracts • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -64,6 +65,9 @@ export default async function ContractsPage() {
                         {' '}
                         <TerminateContractButton contractId={r.id} />
                       </>
+                    )}
+                    {r.status === 'COMPLETED' && !r.closedOn && (
+                      <CloseContractButton contractId={r.id} />
                     )}
                   </td>
                 </tr>

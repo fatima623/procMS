@@ -143,6 +143,41 @@ export const executionObligations = {
     });
   },
 
+  /**
+   * Formally close a contract after taking-over + all follow-up obligations
+   * are settled. COMPLETED → CLOSED and stamps `closedOn`. Refuses if the
+   * contract is not yet COMPLETED, is already CLOSED, or was TERMINATED
+   * (termination has its own flow and keeps a non-CLOSED status for the
+   * risk-purchase trail). Does NOT itself check invoices/payments/LDs —
+   * that compliance read belongs to ZeroLinkAI.
+   */
+  async closeContract(contractId: string, closedOn: Date): Promise<void> {
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      select: { id: true, status: true, closedOn: true, takingOverCertifiedOn: true },
+    });
+    if (!contract) throw new NotFoundError('Contract', contractId);
+    if (contract.closedOn) {
+      throw new ValidationError('Contract is already closed');
+    }
+    if (contract.status === 'CLOSED') {
+      throw new ValidationError('Contract is already CLOSED');
+    }
+    if (contract.status === 'TERMINATED') {
+      throw new ValidationError('Cannot close a TERMINATED contract');
+    }
+    if (contract.status !== 'COMPLETED') {
+      throw new ValidationError(
+        `Contract must be COMPLETED before closing (currently ${contract.status}). ` +
+        'Issue the Taking-Over Certificate first.',
+      );
+    }
+    await prisma.contract.update({
+      where: { id: contractId },
+      data: { status: 'CLOSED', closedOn },
+    });
+  },
+
   // --- Inspection (DPP&I-35 Ch XVI) -------------------------------------------
 
   async recordInspection(performedByUserId: string, input: RecordInspectionInput): Promise<{ id: string }> {
