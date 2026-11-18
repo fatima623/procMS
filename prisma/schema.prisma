@@ -61,6 +61,7 @@ enum Role {
   CPO
   INSPECTORATE
   FIRM_REP
+  HR_STAFF
 }
 
 enum SectionKind {
@@ -101,7 +102,13 @@ model User {
   notifications        Notification[]
   authoredComments     Comment[]            @relation("CommentAuthor")
   passwordResetTokens  PasswordResetToken[]
-  internalDemands      InternalDemand[]     @relation("DemandRaisedBy")
+  internalDemands             InternalDemand[]             @relation("DemandRaisedBy")
+  internalProcurementsRaised  InternalProcurement[]        @relation("InternalProcurementRaisedBy")
+  inventoryLedgersEntered     InventoryLedgerEntry[]       @relation("InventoryLedgerEnteredBy")
+  vehicleRequisitionsRaised   VehicleRequisition[]         @relation("VehicleRequisitionRaisedBy")
+  vehicleRequisitionsApproved VehicleRequisition[]         @relation("VehicleRequisitionApprovedBy")
+  workOrdersRaised            WorkOrder[]                  @relation("WorkOrderRaisedBy")
+  telephoneBillsEntered       TelephoneBill[]              @relation("TelephoneBillEnteredBy")
   @@index([firmId])
 }
 
@@ -231,7 +238,11 @@ model Firm {
   blacklists           Blacklist[]
   grievances           Grievance[]
   integrityPacts       IntegrityPact[]
-  registrations        FirmRegistration[]
+  registrations               FirmRegistration[]
+  invitedInternalProcurements InternalProcurementInvitedFirm[]
+  quotationsInternalProcurements InternalProcurementQuotation[]
+  supplyOrders                SupplyOrder[]
+  contingentBills             ContingentBill[]
 }
 
 // -----------------------------------------------------------------------------
@@ -1896,4 +1907,364 @@ model InternalDemandItem {
   demand InternalDemand @relation(fields: [demandId], references: [id], onDelete: Cascade)
 
   @@index([demandId])
+}
+
+
+// =============================================================================
+// Internal Procurement (AR4, v4.4.1 migration §4.35)
+// Lightweight small discretionary spend parallel to main Indent->Contract flow.
+// =============================================================================
+
+enum InternalProcurementStatus {
+  DRAFT
+  QUOTED
+  ORDERED
+  CLOSED
+  CANCELLED
+}
+
+model InternalProcurement {
+  id             String                    @id @db.VarChar(26)
+  reference      String                    @unique @db.VarChar(40)
+  raisedOn       DateTime                  @db.Date
+  raisedByUserId String                    @db.VarChar(26)
+  status         InternalProcurementStatus @default(DRAFT)
+  notes          String?                   @db.Text
+  createdAt      DateTime                  @default(now()) @db.DateTime(6)
+  updatedAt      DateTime                  @updatedAt @db.DateTime(6)
+
+  raisedBy            User                             @relation("InternalProcurementRaisedBy", fields: [raisedByUserId], references: [id])
+  items               InternalProcurementItem[]
+  invitedFirms        InternalProcurementInvitedFirm[]
+  quotations          InternalProcurementQuotation[]
+  supplyOrder         SupplyOrder?
+  sanctionCertificate SanctionCertificate?
+  debitableVoucher    DebitableVoucher?
+  contingentBills     ContingentBill[]
+
+  @@index([status])
+  @@index([raisedByUserId])
+}
+
+model InternalProcurementItem {
+  id            String  @id @db.VarChar(26)
+  procurementId String  @db.VarChar(26)
+  itemName      String  @db.VarChar(255)
+  quantity      Decimal @db.Decimal(20, 4)
+  uom           String  @db.VarChar(20)
+
+  procurement InternalProcurement            @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  quotations  InternalProcurementQuotation[]
+
+  @@index([procurementId])
+}
+
+model InternalProcurementInvitedFirm {
+  id            String @id @db.VarChar(26)
+  procurementId String @db.VarChar(26)
+  firmId        String @db.VarChar(26)
+
+  procurement InternalProcurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  firm        Firm                @relation(fields: [firmId], references: [id])
+
+  @@unique([procurementId, firmId])
+  @@index([procurementId])
+  @@index([firmId])
+}
+
+model InternalProcurementQuotation {
+  id               String  @id @db.VarChar(26)
+  procurementId    String  @db.VarChar(26)
+  firmId           String  @db.VarChar(26)
+  itemId           String  @db.VarChar(26)
+  quotedPriceMinor BigInt
+  currency         String  @default("PKR") @db.VarChar(3)
+
+  procurement InternalProcurement     @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  firm        Firm                    @relation(fields: [firmId], references: [id])
+  item        InternalProcurementItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([procurementId])
+  @@index([firmId])
+  @@index([itemId])
+}
+
+model SupplyOrder {
+  id              String   @id @db.VarChar(26)
+  procurementId   String   @unique @db.VarChar(26)
+  firmId          String   @db.VarChar(26)
+  orderedOn       DateTime @db.Date
+  totalValueMinor BigInt
+  currency        String   @default("PKR") @db.VarChar(3)
+  documentKey     String?  @db.VarChar(500)
+
+  procurement InternalProcurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  firm        Firm                @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+}
+
+model SanctionCertificate {
+  id                String   @id @db.VarChar(26)
+  procurementId     String   @unique @db.VarChar(26)
+  certificateNumber String   @db.VarChar(50)
+  issuedOn          DateTime @db.Date
+  authority         String   @db.VarChar(100)
+  documentKey       String?  @db.VarChar(500)
+
+  procurement InternalProcurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+}
+
+model DebitableVoucher {
+  id            String   @id @db.VarChar(26)
+  procurementId String   @unique @db.VarChar(26)
+  voucherNumber String   @db.VarChar(50)
+  amountMinor   BigInt
+  currency      String   @default("PKR") @db.VarChar(3)
+  issuedOn      DateTime @db.Date
+
+  procurement InternalProcurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+}
+
+model ContingentBill {
+  id            String    @id @db.VarChar(26)
+  procurementId String    @db.VarChar(26)
+  firmId        String    @db.VarChar(26)
+  billNumber    String    @db.VarChar(50)
+  amountMinor   BigInt
+  currency      String    @default("PKR") @db.VarChar(3)
+  submittedOn   DateTime  @db.Date
+  paidOn        DateTime? @db.Date
+
+  procurement InternalProcurement @relation(fields: [procurementId], references: [id], onDelete: Cascade)
+  firm        Firm                @relation(fields: [firmId], references: [id])
+
+  @@index([procurementId])
+  @@index([firmId])
+}
+
+// =============================================================================
+// Inventory Ledger (AR5, v4.4.1 migration §4.36)
+// Issuance against demand or receiving against tender
+// =============================================================================
+
+enum InventoryLedgerKind {
+  ISSUANCE
+  RECEIVING
+}
+
+model InventoryLedgerEntry {
+  id                 String              @id @db.VarChar(26)
+  kind               InventoryLedgerKind
+  happenedOn         DateTime            @db.Date
+  sourceDemandId     String?             @db.VarChar(26)
+  sourceITPerformaId String?             @db.VarChar(26)
+  itemName           String              @db.VarChar(255)
+  quantity           Decimal             @db.Decimal(20, 4)
+  uom                String              @db.VarChar(20)
+  enteredByUserId    String              @db.VarChar(26)
+  remarks            String?             @db.Text
+  createdAt          DateTime            @default(now()) @db.DateTime(6)
+
+  enteredBy User @relation("InventoryLedgerEnteredBy", fields: [enteredByUserId], references: [id])
+
+  @@index([kind])
+  @@index([happenedOn])
+  @@index([enteredByUserId])
+}
+
+// =============================================================================
+// Vehicle Requisition (AR6, v4.4.1 migration §4.37)
+// =============================================================================
+
+enum VehicleRequisitionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+model VehicleRequisition {
+  id                 String                   @id @db.VarChar(26)
+  requisitionNumber  String                   @unique @db.VarChar(40)
+  raisedByUserId     String                   @db.VarChar(26)
+  purpose            String                   @db.Text
+  fromLocation       String                   @db.VarChar(255)
+  toLocation         String                   @db.VarChar(255)
+  requiredFrom       DateTime                 @db.DateTime(6)
+  requiredTo         DateTime                 @db.DateTime(6)
+  passengerCount     Int
+  status             VehicleRequisitionStatus @default(PENDING)
+  approvedByUserId   String?                  @db.VarChar(26)
+  decidedOn          DateTime?                @db.DateTime(6)
+  assignedVehicleRef String?                  @db.VarChar(100)
+  remarks            String?                  @db.Text
+  createdAt          DateTime                 @default(now()) @db.DateTime(6)
+  updatedAt          DateTime                 @updatedAt @db.DateTime(6)
+
+  raisedBy   User  @relation("VehicleRequisitionRaisedBy", fields: [raisedByUserId], references: [id])
+  approvedBy User? @relation("VehicleRequisitionApprovedBy", fields: [approvedByUserId], references: [id])
+
+  @@index([status])
+  @@index([raisedByUserId])
+}
+
+// =============================================================================
+// Work Order (AR7, v4.4.1 migration §4.38)
+// =============================================================================
+
+enum WorkOrderKind {
+  MAINTENANCE
+  REPAIR
+  OTHER
+}
+
+enum WorkOrderStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model WorkOrder {
+  id              String          @id @db.VarChar(26)
+  workOrderNumber String          @unique @db.VarChar(40)
+  kind            WorkOrderKind
+  subject         String          @db.VarChar(255)
+  raisedOn        DateTime        @db.Date
+  raisedByUserId  String          @db.VarChar(26)
+  assignedTo      String?         @db.VarChar(100)
+  status          WorkOrderStatus @default(OPEN)
+  completedOn     DateTime?       @db.Date
+  costMinor       BigInt?
+  currency        String?         @db.VarChar(3)
+  notes           String?         @db.Text
+  createdAt       DateTime        @default(now()) @db.DateTime(6)
+  updatedAt       DateTime        @updatedAt @db.DateTime(6)
+
+  raisedBy User @relation("WorkOrderRaisedBy", fields: [raisedByUserId], references: [id])
+
+  @@index([status])
+  @@index([raisedByUserId])
+}
+
+// =============================================================================
+// Telephone Bills (AR8, v4.4.1 migration §4.39)
+// =============================================================================
+
+model TelephoneBill {
+  id              String    @id @db.VarChar(26)
+  phoneNumber     String    @db.VarChar(50)
+  billMonth       String    @db.VarChar(7)
+  billAmountMinor BigInt
+  currency        String    @default("PKR") @db.VarChar(3)
+  dueDate         DateTime  @db.Date
+  paidOn          DateTime? @db.Date
+  documentKey     String?   @db.VarChar(500)
+  enteredByUserId String    @db.VarChar(26)
+  createdAt       DateTime  @default(now()) @db.DateTime(6)
+  updatedAt       DateTime  @updatedAt @db.DateTime(6)
+
+  enteredBy User @relation("TelephoneBillEnteredBy", fields: [enteredByUserId], references: [id])
+
+  @@index([billMonth])
+  @@index([enteredByUserId])
+}
+
+// =============================================================================
+// Employees & HR (AR2, v4.4.1 migration §4.33)
+// =============================================================================
+
+enum LeaveKind {
+  CASUAL
+  EARNED
+  MEDICAL
+  ABSENT
+}
+
+model Employee {
+  id              String    @id @db.VarChar(26)
+  userId          String?   @unique @db.VarChar(26)
+  personnelNumber String    @unique @db.VarChar(50)
+  rank            String    @db.VarChar(100)
+  designation     String    @db.VarChar(100)
+  section         String    @db.VarChar(100)
+  dateOfJoining   DateTime  @db.Date
+  dateOfBirth     DateTime  @db.Date
+  bloodGroup      String?   @db.VarChar(10)
+  contact         String?   @db.VarChar(50)
+  maritalStatus   String?   @db.VarChar(20)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now()) @db.DateTime(6)
+  updatedAt       DateTime  @updatedAt @db.DateTime(6)
+
+  serviceRecords       EmployeeServiceRecord[]
+  leaves               EmployeeLeave[]
+  houseHirings         EmployeeHouseHiring[]
+  disciplinaryActions  EmployeeDisciplinaryAction[]
+
+  @@index([section])
+  @@index([isActive])
+}
+
+model EmployeeServiceRecord {
+  id          String    @id @db.VarChar(26)
+  employeeId  String    @db.VarChar(26)
+  postingFrom DateTime  @db.Date
+  postingTo   DateTime? @db.Date
+  section     String    @db.VarChar(100)
+  remarks     String?   @db.Text
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model EmployeeLeave {
+  id               String    @id @db.VarChar(26)
+  employeeId       String    @db.VarChar(26)
+  kind             LeaveKind
+  fromDate         DateTime  @db.Date
+  toDate           DateTime  @db.Date
+  approvedByUserId String?   @db.VarChar(26)
+  remarks          String?   @db.Text
+  createdAt        DateTime  @default(now()) @db.DateTime(6)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([fromDate, toDate])
+}
+
+model EmployeeHouseHiring {
+  id               String    @id @db.VarChar(26)
+  employeeId       String    @db.VarChar(26)
+  address          String    @db.Text
+  landlord         String    @db.VarChar(100)
+  hireStart        DateTime  @db.Date
+  hireEnd          DateTime? @db.Date
+  monthlyRentMinor BigInt
+  currency         String    @default("PKR") @db.VarChar(3)
+  documentKey      String?   @db.VarChar(500)
+  createdAt        DateTime  @default(now()) @db.DateTime(6)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+}
+
+model EmployeeDisciplinaryAction {
+  id          String   @id @db.VarChar(26)
+  employeeId  String   @db.VarChar(26)
+  kind        String   @db.VarChar(100)
+  issuedOn    DateTime @db.Date
+  authority   String   @db.VarChar(100)
+  decision    String   @db.Text
+  remarks     String?  @db.Text
+  documentKey String?  @db.VarChar(500)
+  createdAt   DateTime @default(now()) @db.DateTime(6)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
 }
