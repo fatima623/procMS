@@ -53,6 +53,7 @@ const NAV: NavItem[] = [
   { href: '/firm/invites',       label: 'IT invites',            icon: NAV_ICON.mail,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/queries',       label: 'Firm queries',          icon: NAV_ICON.chat,      show: (r, f) => !!f || r.includes(Role.ADMIN) },
   { href: '/firm/prs',           label: 'Firm PRs',              icon: NAV_ICON.doc,       show: (r, f) => !!f || r.includes(Role.ADMIN) },
+  { href: '/admin/transport/requisitions', label: 'Transport',         icon: NAV_ICON.wrench,    show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
   { href: '/settings/security',  label: 'Security',              icon: NAV_ICON.shield,    show: () => true },
   { href: '/docs',               label: 'API docs',              icon: NAV_ICON.book,      show: (r) => r.includes(Role.ADMIN) },
   { href: '/admin',              label: 'Admin',                 icon: NAV_ICON.gear,      show: (r) => r.includes(Role.ADMIN) },
