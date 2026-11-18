@@ -38,9 +38,10 @@ const I = {
   ban:       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5 5l14 14"/></svg>,
 };
 
-export default async function DashboardPage({ searchParams }: { searchParams: { fy?: string } }) {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ fy?: string }> }) {
   const ctx = await requireSessionCtx();
-  const s = await loadDashboardSummary(ctx, { ...(searchParams.fy ? { fiscalYearId: searchParams.fy } : {}) });
+  const sp = await searchParams;
+  const s = await loadDashboardSummary(ctx, { ...(sp.fy ? { fiscalYearId: sp.fy } : {}) });
   const isAdmin = ctx.roles.includes(Role.ADMIN);
   const seniorRoles: readonly Role[] = [Role.ADMIN, Role.DGDP, Role.SECY_DP, Role.DP_N];
   const showCompliancePosture = seniorRoles.some((r) => ctx.roles.includes(r));
