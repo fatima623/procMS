@@ -1972,3 +1972,25 @@ model FirmDisciplinaryAction {
 
   @@index([firmId, kind])
 }
+
+model BudgetCard {
+  id                String    @id @db.VarChar(26)
+  indentId          String    @unique @db.VarChar(26)
+  controlNumber     String    @unique @db.VarChar(40)
+  fiscalYearId      String    @db.VarChar(26)
+  budgetHeadId      String    @db.VarChar(26)
+  reservedAmount    Decimal   @db.Decimal(20, 4)
+  currency          String    @default("PKR") @db.VarChar(3)
+  preparedByUserId  String    @db.VarChar(26)
+  preparedAt        DateTime  @default(now()) @db.DateTime(6)
+  clearedAt         DateTime? @db.DateTime(6)
+  clearedByUserId   String?   @db.VarChar(26)
+  committedAt       DateTime? @db.DateTime(6)
+  committedByUserId String?   @db.VarChar(26)
+  notes             String?   @db.Text
+  createdAt         DateTime  @default(now()) @db.DateTime(6)
+  updatedAt         DateTime  @updatedAt @db.DateTime(6)
+  version           Int       @default(0)
+
+  @@index([fiscalYearId, budgetHeadId])
+}
