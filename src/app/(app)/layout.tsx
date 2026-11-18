@@ -35,6 +35,7 @@ const NAV: NavItem[] = [
   { href: '/indents',            label: 'Indents',               icon: NAV_ICON.stack,     show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
   { href: '/stores/demands',     label: 'Stores Demands',        icon: NAV_ICON.stack,     show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
   { href: '/stores/procurement', label: 'Internal Procurement',  icon: NAV_ICON.book,      show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
+  { href: '/stores/ledger',      label: 'Inventory Ledger',      icon: NAV_ICON.doc,       show: (r) => !r.includes(Role.FIRM_REP) || r.includes(Role.ADMIN) },
   { href: '/approvals',          label: 'My approvals',          icon: NAV_ICON.check,     show: (r) => [Role.AD, Role.DD, Role.DP_N, Role.DGDP, Role.SECY_DP, Role.SUPTD, Role.CPO, Role.ADMIN].some((x) => r.includes(x)) },
   { href: '/it-proformas',       label: 'IT Proformas',          icon: NAV_ICON.mail,      show: SHOW_WORKFLOW },
   { href: '/tsrs',               label: 'TSR queue',             icon: NAV_ICON.wrench,    show: (r) => r.includes(Role.INSPECTORATE) || r.includes(Role.ADMIN) },
