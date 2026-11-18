@@ -1,0 +1,23 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireAuth } from '@/interfaces/http/middleware/authGuard';
+import { toHttpResponse } from '@/interfaces/http/errors';
+import { REQUEST_ID_HEADER, requestIdOf } from '@/interfaces/http/requestId';
+import { internalDemandService } from '@/infrastructure/stores/InternalDemandService';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string; itemId: string }> },
+): Promise<NextResponse> {
+  const rid = requestIdOf(req);
+  try {
+    const { itemId } = await params;
+    await requireAuth(req);
+    await internalDemandService.removeItem(itemId);
+    return NextResponse.json({ data: { success: true } }, { headers: { [REQUEST_ID_HEADER]: rid } });
+  } catch (err) {
+    return toHttpResponse(err, rid);
+  }
+}
