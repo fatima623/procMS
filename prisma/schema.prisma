@@ -232,6 +232,12 @@ model Firm {
   grievances           Grievance[]
   integrityPacts       IntegrityPact[]
   registrations        FirmRegistration[]
+  financial            FirmFinancial?
+  itemCatalog          FirmItemCatalog[]
+  signatories          FirmSignatory[]
+  partners             FirmPartner[]
+  agents               FirmAgent[]
+  disciplinaryActions  FirmDisciplinaryAction[]
 }
 
 // -----------------------------------------------------------------------------
@@ -1853,4 +1859,116 @@ model Discrepancy {
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
   @@index([inspectionId, status])
+}
+
+
+enum FirmDisciplinaryKind {
+  WARNING
+  NOTICE
+  PERFORMANCE_FAIL
+  OTHER
+}
+
+model FirmFinancial {
+  id                String    @id @db.VarChar(26)
+  firmId            String    @unique @db.VarChar(26)
+  paidUpCapital     Decimal   @db.Decimal(20, 4)
+  annualTurnover    Decimal   @db.Decimal(20, 4)
+  currency          String    @default("PKR") @db.VarChar(3)
+  bankName          String    @db.VarChar(255)
+  bankAccountNumber String    @db.VarChar(60)
+  taxStatus         String    @db.VarChar(60)
+  lastAuditedOn     DateTime? @db.Date
+  remarks           String?   @db.Text
+  createdAt         DateTime  @default(now()) @db.DateTime(6)
+  updatedAt         DateTime  @updatedAt @db.DateTime(6)
+  version           Int       @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+}
+
+model FirmItemCatalog {
+  id        String   @id @db.VarChar(26)
+  firmId    String   @db.VarChar(26)
+  itemName  String   @db.VarChar(255)
+  itemCode  String?  @db.VarChar(60)
+  category  String   @db.VarChar(120)
+  addedOn   DateTime @default(now()) @db.DateTime(6)
+  createdAt DateTime @default(now()) @db.DateTime(6)
+  updatedAt DateTime @updatedAt @db.DateTime(6)
+  version   Int      @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+}
+
+model FirmSignatory {
+  id                String   @id @db.VarChar(26)
+  firmId            String   @db.VarChar(26)
+  personName        String   @db.VarChar(255)
+  designation       String   @db.VarChar(120)
+  phone             String?  @db.VarChar(60)
+  email             String?  @db.VarChar(254)
+  signatureImageKey String?  @db.VarChar(500)
+  addedOn           DateTime @default(now()) @db.DateTime(6)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now()) @db.DateTime(6)
+  updatedAt         DateTime @updatedAt @db.DateTime(6)
+  version           Int      @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, isActive])
+}
+
+model FirmPartner {
+  id                  String    @id @db.VarChar(26)
+  firmId              String    @db.VarChar(26)
+  partnerName         String    @db.VarChar(255)
+  shareholdingPercent Decimal   @db.Decimal(5, 2)
+  addedOn             DateTime  @default(now()) @db.DateTime(6)
+  leftOn              DateTime? @db.Date
+  createdAt           DateTime  @default(now()) @db.DateTime(6)
+  updatedAt           DateTime  @updatedAt @db.DateTime(6)
+  version             Int       @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+}
+
+model FirmAgent {
+  id                   String    @id @db.VarChar(26)
+  firmId               String    @db.VarChar(26)
+  agentName            String    @db.VarChar(255)
+  localAddress         String    @db.VarChar(500)
+  commissionPercent    Decimal   @db.Decimal(5, 2)
+  agreementDocumentKey String?   @db.VarChar(500)
+  agreementFrom        DateTime  @db.Date
+  agreementTo          DateTime? @db.Date
+  createdAt            DateTime  @default(now()) @db.DateTime(6)
+  updatedAt            DateTime  @updatedAt @db.DateTime(6)
+  version              Int       @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId])
+}
+
+model FirmDisciplinaryAction {
+  id             String               @id @db.VarChar(26)
+  firmId         String               @db.VarChar(26)
+  kind           FirmDisciplinaryKind
+  issuedOn       DateTime             @db.Date
+  issuedByUserId String               @db.VarChar(26)
+  description    String               @db.Text
+  documentKey    String?              @db.VarChar(500)
+  createdAt      DateTime             @default(now()) @db.DateTime(6)
+  updatedAt      DateTime             @updatedAt @db.DateTime(6)
+  version        Int                  @default(0)
+
+  firm Firm @relation(fields: [firmId], references: [id])
+
+  @@index([firmId, kind])
 }
