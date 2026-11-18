@@ -101,7 +101,7 @@ model User {
   notifications        Notification[]
   authoredComments     Comment[]            @relation("CommentAuthor")
   passwordResetTokens  PasswordResetToken[]
-
+  internalDemands      InternalDemand[]     @relation("DemandRaisedBy")
   @@index([firmId])
 }
 
@@ -141,6 +141,7 @@ model Section {
   members     SectionMember[]
   indents     Indent[]        @relation("OwningSection")
   assignedAdp Indent[]        @relation("AssignedAdp")
+  internalDemands InternalDemand[] @relation("DemandForSection")
 
   @@index([kind])
   @@index([parentId])
@@ -173,7 +174,6 @@ model FiscalYear {
   indents                Indent[]
   annualProcurementPlans AnnualProcurementPlan[]
 }
-
 model BudgetHead {
   id          String   @id @db.VarChar(26)
   code        String   @unique @db.VarChar(40)
@@ -1853,4 +1853,47 @@ model Discrepancy {
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
   @@index([inspectionId, status])
+}
+// =============================================================================
+// Internal Demand Raising (AR3, v4.4.1 migration §4.34)
+// A section's upstream request for items. NOT the procurement indent.
+// =============================================================================
+
+enum InternalDemandStatus {
+  OPEN
+  ISSUED
+  CLOSED
+}
+
+model InternalDemand {
+  id                 String               @id @db.VarChar(26)
+  demandNumber       String               @unique @db.VarChar(40)
+  raisedByUserId     String               @db.VarChar(26)
+  raisedForSectionId String               @db.VarChar(26)
+  raisedOn           DateTime             @db.Date
+  status             InternalDemandStatus @default(OPEN)
+  notes              String?              @db.Text
+  createdAt          DateTime             @default(now()) @db.DateTime(6)
+  updatedAt          DateTime             @updatedAt @db.DateTime(6)
+
+  raisedBy     User                 @relation("DemandRaisedBy", fields: [raisedByUserId], references: [id])
+  raisedForSection Section          @relation("DemandForSection", fields: [raisedForSectionId], references: [id])
+  items        InternalDemandItem[]
+
+  @@index([status])
+  @@index([raisedForSectionId])
+  @@index([raisedByUserId])
+}
+
+model InternalDemandItem {
+  id       String  @id @db.VarChar(26)
+  demandId String  @db.VarChar(26)
+  itemName String  @db.VarChar(255)
+  quantity Decimal @db.Decimal(20, 4)
+  uom      String  @db.VarChar(20)
+  remarks  String? @db.VarChar(500)
+
+  demand InternalDemand @relation(fields: [demandId], references: [id], onDelete: Cascade)
+
+  @@index([demandId])
 }
