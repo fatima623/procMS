@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { Role } from '@prisma/client';
 import { requireRoles } from '@/interfaces/ui/auth';
 import { AdminSectionService } from '@/application/admin/AdminSectionService';
-import { StatusPill } from '@/interfaces/ui/components/StatusPill';
 import { Empty } from '@/interfaces/ui/components/Empty';
 import { KpiCard } from '@/interfaces/ui/components/KpiCard';
+import { SectionTree } from './SectionTree';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Sections • Admin' };
@@ -56,16 +56,7 @@ export default async function SectionsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((s) => (
-                <tr key={s.id}>
-                  <td className="mono">{s.code}</td>
-                  <td>{s.name}</td>
-                  <td className="muted">{s.kind}</td>
-                  <td className="right mono">{s.memberCount}</td>
-                  <td>{s.isActive ? <StatusPill tone="ok">Active</StatusPill> : <StatusPill tone="danger">Inactive</StatusPill>}</td>
-                  <td className="right"><Link className="btn" href={`/admin/sections/${s.id}`}>Edit →</Link></td>
-                </tr>
-              ))}
+              <SectionTree rows={rows} />
             </tbody>
           </table>
         </div>

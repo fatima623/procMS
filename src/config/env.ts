@@ -10,11 +10,24 @@ import { z } from 'zod';
  */
 const emptyToUndef = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 
+const normalizeLocalSecret = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  const isNonProduction = (process.env.NODE_ENV ?? 'development') !== 'production';
+
+  if (trimmed.length >= 32 || !isNonProduction) {
+    return trimmed;
+  }
+
+  return 'development-local-nextauth-secret-32chars-!!';
+};
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().url(),
   DIRECT_URL: z.preprocess(emptyToUndef, z.string().url().optional()),
-  NEXTAUTH_SECRET: z.string().min(32, 'NEXTAUTH_SECRET must be at least 32 chars'),
+  NEXTAUTH_SECRET: z.preprocess(normalizeLocalSecret, z.string().min(32, 'NEXTAUTH_SECRET must be at least 32 chars')),
   NEXTAUTH_URL: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? 'http://localhost:3000' : v),
     z.string().url().default('http://localhost:3000'),
