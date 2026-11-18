@@ -7,6 +7,7 @@ import { decimalToMinor } from '@/infrastructure/common/decimal';
 import { KpiCard, type Accent } from '@/interfaces/ui/components/KpiCard';
 import { MoneyCompact } from '@/interfaces/ui/components/Money';
 import { FirmForm } from '../FirmForm';
+import { FirmTabs } from './FirmTabs';
 import { NotFoundError } from '@/domain/errors/DomainError';
 
 export const dynamic = 'force-dynamic';
@@ -48,21 +49,26 @@ export default async function EditFirmPage({ params }: { params: Promise<{ id: s
         <KpiCard accent="violet"       icon={H_ICON.wallet} label="Awarded value" value={<MoneyCompact amountMinor={awarded} currency="PKR" precision={2} />} sub="Lifetime, across all PRs" />
       </section>
 
-      <FirmForm
-        mode="edit"
+            <FirmTabs
         firmId={firm.id}
-        initial={{
-          code: firm.code,
-          name: firm.name,
-          ntn: firm.ntn ?? '',
-          address: firm.address ?? '',
-          city: firm.city ?? '',
-          country: firm.country ?? '',
-          email: firm.email ?? '',
-          phone: firm.phone ?? '',
-          isActive: firm.isActive,
-          isBlacklisted: firm.isBlacklisted,
-        }}
+        basicInfo={
+          <FirmForm
+            mode="edit"
+            firmId={firm.id}
+            initial={{
+              code: firm.code,
+              name: firm.name,
+              ntn: firm.ntn ?? '',
+              address: firm.address ?? '',
+              city: firm.city ?? '',
+              country: firm.country ?? '',
+              email: firm.email ?? '',
+              phone: firm.phone ?? '',
+              isActive: firm.isActive,
+              isBlacklisted: firm.isBlacklisted,
+            }}
+          />
+        }
       />
     </>
   );
