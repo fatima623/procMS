@@ -3,9 +3,10 @@ import Link from 'next/link';
 
 export const metadata = { title: 'Reset password • Procurement' };
 
-export default function ResetPasswordPage({ searchParams }: { searchParams: { token?: string; id?: string } }) {
-  const token = searchParams.token ?? '';
-  const id = searchParams.id ?? '';
+export default async function ResetPasswordPage({ searchParams }: { searchParams: Promise<{ token?: string; id?: string }> }) {
+  const params = await searchParams;
+  const token = params.token ?? '';
+  const id = params.id ?? '';
   const linkValid = /^[a-f0-9]{64}$/.test(token) && /^[A-Z0-9]{26}$/.test(id);
 
   return (

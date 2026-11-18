@@ -55,6 +55,9 @@ export async function register(): Promise<void> {
   const shutdown = async () => {
     try { await sdk.shutdown(); } catch { /* best effort */ }
   };
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  const nodeProcess = (globalThis as unknown as {
+    process?: { once: (signal: string, listener: () => void | Promise<void>) => void };
+  }).process;
+  nodeProcess?.once('SIGTERM', shutdown);
+  nodeProcess?.once('SIGINT', shutdown);
 }
