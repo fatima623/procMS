@@ -99,6 +99,21 @@ export interface DashboardSummary {
       readonly count: number;
       readonly href?: string;
     }[];
+    readonly pipelineBySection: readonly {
+      readonly section: string;
+      readonly [status: string]: string | number;
+    }[];
+    readonly awardsTrend: readonly {
+      readonly month: string;
+      readonly amountMillion: number;
+      readonly count: number;
+    }[];
+    readonly budgetPie: readonly {
+      readonly name: string;
+      readonly valueMillion: number;
+      readonly valueMinor: string;
+      readonly color: string;
+    }[];
   };
 
   readonly fiscalYears: readonly { readonly id: string; readonly label: string; readonly isActive: boolean }[];
@@ -159,6 +174,7 @@ export async function loadDashboardSummary(ctx: AuthContext, opts: DashboardOpts
     rejectionStats: { rejected: 0, cancelled: 0, byStage: [] },
     sla: { withinSla: 0, breached: 0, samples: 0, breaches: [] },
     pareto: [], heatmap: [], compliance: [],
+    pipelineBySection: [], awardsTrend: [], budgetPie: [],
   };
 
   const fiscalYears = await prisma.fiscalYear.findMany({
@@ -493,7 +509,114 @@ async function loadAdminAnalytics(
   if (chainsOld > 0) compliance.push({ id: 'old-chains', severity: 'high', title: 'Approval chains pending > 10 days', count: chainsOld, detail: 'Chain owners should either decide or reassign.', href: '/approvals' });
   if (sla.breached > 0) compliance.push({ id: 'sla-breach', severity: 'high', title: 'Active indents past SLA target', count: sla.breached, detail: 'See the SLA tracker for the top breaches by priority.' });
 
-  return { cycleTime, bottlenecks, chainVelocity, budgetUtilization, monthlyTrend, rejectionStats, sla, pareto, heatmap, compliance };
+  // --- AR9: Chart 1 — Indent pipeline stacked by status, split by section
+  const pipelineRows = await prisma.indent.findMany({
+    where: { ...fyWhere, status: { notIn: ['CANCELLED', 'INDENT_REJECTED', 'BUDGET_REJECTED'] as unknown as any[] } },
+    select: {
+      status: true,
+      section: { select: { code: true } },
+    },
+  });
+  const secStatusMap = new Map<string, Record<string, number>>();
+  for (const r of pipelineRows) {
+    const sec = r.section?.code ?? 'General';
+    const rec = secStatusMap.get(sec) ?? {
+      DRAFT: 0,
+      SUBMITTED: 0,
+      IN_REVIEW: 0,
+      APPROVED: 0,
+      TENDERED: 0,
+      CLOSED: 0,
+    };
+    if (r.status in rec) {
+      rec[r.status] = (rec[r.status] ?? 0) + 1;
+    } else if (['ADP_VETTING', 'COORD_VETTING', 'BUDGET_CHECK', 'SUPTD_VETTING'].includes(r.status)) {
+      rec.IN_REVIEW = (rec.IN_REVIEW ?? 0) + 1;
+    } else if (['IT_PREPARATION', 'CST_PREPARATION', 'TENDER_ISSUED', 'BID_OPENED'].includes(r.status)) {
+      rec.TENDERED = (rec.TENDERED ?? 0) + 1;
+    } else {
+      rec.DRAFT = (rec.DRAFT ?? 0) + 1;
+    }
+    secStatusMap.set(sec, rec);
+  }
+  const pipelineBySection = [...secStatusMap.entries()].map(([section, counts]) => ({
+    section,
+    ...counts,
+  }));
+
+  // --- AR9: Chart 2 — Contract awards trend (MoM)
+  const contracts = await prisma.contract.findMany({
+    select: { awardedOn: true, createdAt: true, value: true },
+  });
+  const awardMonthMap = new Map<string, { count: number; totalMinor: bigint }>();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - i, 1));
+    awardMonthMap.set(monthKey(d), { count: 0, totalMinor: 0n });
+  }
+  for (const c of contracts) {
+    const dt = c.awardedOn ?? c.createdAt;
+    const k = monthKey(dt);
+    if (awardMonthMap.has(k)) {
+      const cur = awardMonthMap.get(k)!;
+      cur.count += 1;
+      cur.totalMinor += decimalToMinor(c.value as unknown as string);
+    }
+  }
+  if (contracts.length === 0) {
+    for (const p of prsWithHead) {
+      const k = monthKey(new Date());
+      if (awardMonthMap.has(k)) {
+        const cur = awardMonthMap.get(k)!;
+        cur.count += 1;
+        cur.totalMinor += decimalToMinor(p.amount as unknown as string);
+      }
+    }
+  }
+  const awardsTrend = [...awardMonthMap.entries()].map(([month, v]) => ({
+    month,
+    amountMillion: Number(v.totalMinor / 100n) / 1_000_000,
+    count: v.count,
+  }));
+
+  // --- AR9: Chart 3 — Budget utilisation pie (Allocated / Reserved / Spent)
+  const allocations = await prisma.budgetAllocation.findMany({
+    where: fiscalYearId ? { fiscalYearId } : {},
+    select: { allocated: true, reserved: true, spent: true },
+  });
+  let totalAllocatedMinor = 0n;
+  let totalReservedMinor = 0n;
+  let totalSpentMinor = 0n;
+  for (const a of allocations) {
+    totalAllocatedMinor += decimalToMinor(a.allocated as unknown as string);
+    totalReservedMinor += decimalToMinor(a.reserved as unknown as string);
+    totalSpentMinor += decimalToMinor(a.spent as unknown as string);
+  }
+  const availableMinor = totalAllocatedMinor > (totalReservedMinor + totalSpentMinor)
+    ? totalAllocatedMinor - totalReservedMinor - totalSpentMinor
+    : 0n;
+
+  const budgetPie = [
+    {
+      name: 'Available',
+      valueMillion: Number(availableMinor / 100n) / 1_000_000,
+      valueMinor: availableMinor.toString(),
+      color: '#10b981',
+    },
+    {
+      name: 'Reserved',
+      valueMillion: Number(totalReservedMinor / 100n) / 1_000_000,
+      valueMinor: totalReservedMinor.toString(),
+      color: '#f59e0b',
+    },
+    {
+      name: 'Spent',
+      valueMillion: Number(totalSpentMinor / 100n) / 1_000_000,
+      valueMinor: totalSpentMinor.toString(),
+      color: '#6366f1',
+    },
+  ];
+
+  return { cycleTime, bottlenecks, chainVelocity, budgetUtilization, monthlyTrend, rejectionStats, sla, pareto, heatmap, compliance, pipelineBySection, awardsTrend, budgetPie };
 }
 
 function round(n: number, digits = 1): number {

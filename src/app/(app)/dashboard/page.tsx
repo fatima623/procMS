@@ -9,6 +9,7 @@ import { Sparkbar } from '@/interfaces/ui/components/Sparkbar';
 import { KpiCard, HeroCard, type Accent } from '@/interfaces/ui/components/KpiCard';
 import { WelcomeTour, type TourStep } from './WelcomeTour';
 import { CompliancePosturePanel } from './CompliancePosturePanel';
+import { DashboardKpiCharts } from './DashboardKpiCharts';
 
 export const metadata = { title: 'Dashboard • Procurement' };
 export const dynamic = 'force-dynamic';
@@ -125,6 +126,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: { 
             <KpiCard accent={slaAccent} icon={I.shield} label="Within SLA" value={`${slaPct}%`} sub={`${an.sla.withinSla} of ${an.sla.samples} active indents`} />
             <KpiCard accent="coral"    icon={I.x}      label="Rejections" value={an.rejectionStats.rejected} sub={`+ ${an.rejectionStats.cancelled} cancelled · rate ${rejectRate}%`} />
           </section>
+
+          {/* Executive KPI Charts (AR9: Indent pipeline, awards trend, budget utilisation) */}
+          <DashboardKpiCharts
+            pipelineData={an.pipelineBySection}
+            awardsTrendData={an.awardsTrend}
+            budgetPieData={an.budgetPie}
+            fiscalYearLabel={selectedFyLabel}
+          />
 
           {/* Compliance / needs attention */}
           {an.compliance.length > 0 && (
