@@ -203,6 +203,11 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
               prStatus={indent.pr?.status ?? null}
               adpSections={adpSections}
             />
+                        {(['BUDGET_CHECK', 'PR_ISSUED'].includes(String(indent.status)) || ctx.roles.includes(Role.BUDGET_STAFF) || ctx.roles.includes(Role.ADMIN)) && (
+              <Link className="btn" href={`/indents/${indent.id}/budget-card`} style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
+                Budget Card →
+              </Link>
+            )}
           </section>
         </aside>
       </div>
