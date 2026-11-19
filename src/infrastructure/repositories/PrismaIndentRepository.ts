@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type Indent as DbIndent, type IndentItem as DbIndentItem } from '@prisma/client';
 
 import { ConcurrencyConflictError } from '@/domain/errors/DomainError';
+import { assertIndentNotLocked } from '@/infrastructure/communication/DecisionApprovalService';
 import { Indent } from '@/domain/indent/Indent';
 import { IndentItem } from '@/domain/indent/IndentItem';
 import { Money } from '@/domain/shared/Money';
@@ -90,7 +91,7 @@ export class PrismaIndentRepository implements IndentRepository {
   public async save(indent: Indent): Promise<void> {
     const expectedVersion = indent.version;
     const result = await this.tx.indent.updateMany({
-      where: { id: indent.id, version: expectedVersion },
+      where: { id: indent.id, version: expectedVersion, decisionApprovalLocked: false },
       data: {
         status: indent.status,
         controlNumber: indent.controlNumber,
@@ -103,6 +104,7 @@ export class PrismaIndentRepository implements IndentRepository {
       },
     });
     if (result.count === 0) {
+      await assertIndentNotLocked(indent.id, this.tx); // locked → clear error; otherwise fall through
       throw new ConcurrencyConflictError('Indent', indent.id);
     }
     indent.markPersisted(expectedVersion + 1);

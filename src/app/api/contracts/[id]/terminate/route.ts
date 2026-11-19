@@ -7,6 +7,7 @@ import { REQUEST_ID_HEADER, requestIdOf } from '@/interfaces/http/requestId';
 import { terminateContractSchema } from '@/interfaces/http/schemas/contractTermination';
 import { prisma } from '@/infrastructure/db/prisma';
 import { NotFoundError, ValidationError } from '@/domain/errors/DomainError';
+import { assertContractNotLocked } from '@/infrastructure/communication/DecisionApprovalService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (contract.status === 'CLOSED') {
         throw new ValidationError('A CLOSED contract cannot be terminated');
       }
+      await assertContractNotLocked(id, tx);
       await tx.contract.update({ where: { id: id }, data: { status: 'TERMINATED' } });
 
       let riskPurchaseId: string | null = null;

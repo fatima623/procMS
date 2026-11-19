@@ -12,6 +12,8 @@ import { Attachments } from './Attachments';
 import { Comments } from './Comments';
 import { commentService } from '@/application/comment/CommentService';
 import { prisma } from '@/infrastructure/db/prisma';
+import { DecisionApprovalPanel } from '@/interfaces/ui/components/DecisionApprovalPanel';
+import { DECISION_ROLES, loadDecisionStates } from '@/infrastructure/communication/DecisionApprovalService';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +41,7 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
       select: { id: true, code: true, name: true },
     }),
   ]);
+  const decision = (await loadDecisionStates('INDENT', [indent.id])).get(indent.id)!;
 
   const statusAccent: Accent = (['CLOSED'].includes(indent.status)) ? 'emerald'
     : (['INDENT_REJECTED', 'BUDGET_REJECTED', 'CANCELLED'].includes(indent.status)) ? 'coral'
@@ -53,6 +56,7 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
             <span className="mono">{indent.indentNumber}</span>
           </h1>
           <div className="muted" style={{ marginTop: 4 }}>{indent.subject}</div>
+          {decision.locked && <div style={{ marginTop: 6 }}><StatusPill tone="warn">🔒 Locked by Decision Approval</StatusPill></div>}
         </div>
         <div className="grow" />
         <Link href={`/indents/${indent.id}/print`} className="btn" target="_blank">Print 🖨</Link>
@@ -65,6 +69,8 @@ export default async function IndentDetailPage({ params }: { params: Promise<{ i
         <KpiCard accent="sky"            icon={H_ICON.users} label="Section"   value={indent.sectionName}             sub={indent.assignedAdpName ? `ADP · ${indent.assignedAdpName}` : 'No ADP yet'} />
         <KpiCard accent="violet"         icon={H_ICON.clock} label="Submitted" value={indent.submittedAt ? <DateLabel iso={indent.submittedAt} /> : 'Draft'} sub={<>Created <DateLabel iso={indent.createdAt} /></>} />
       </section>
+
+      <DecisionApprovalPanel subjectType="INDENT" subjectId={indent.id} label={indent.indentNumber} locked={decision.locked} events={decision.events} canAct={DECISION_ROLES.some((r) => ctx.roles.includes(r))} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
         <div>

@@ -1,5 +1,6 @@
 import { prisma } from '@/infrastructure/db/prisma';
 import { NotFoundError, ValidationError } from '@/domain/errors/DomainError';
+import { assertIndentNotLocked } from '@/infrastructure/communication/DecisionApprovalService';
 import type { RejectAllOffersInput } from '@/interfaces/http/schemas/rebidding';
 
 /**
@@ -41,6 +42,7 @@ export const rebiddingService = {
         data: { status: 'REJECTED' },
       });
       await tx.iTPerforma.update({ where: { id: itPerformaId }, data: { status: 'CLOSED' } });
+      await assertIndentNotLocked(it.indentId, tx);
       await tx.indent.update({ where: { id: it.indentId }, data: { status: 'IT_PREPARATION' } });
       await tx.auditLog.create({
         data: {

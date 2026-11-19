@@ -9,13 +9,17 @@ import { Empty } from '@/interfaces/ui/components/Empty';
 import { IssueTakingOverButton } from './IssueTakingOverButton';
 import { TerminateContractButton } from './TerminateContractButton';
 import { CloseContractButton } from './CloseContractButton';
+import { DecisionApprovalPanel } from '@/interfaces/ui/components/DecisionApprovalPanel';
+import { DECISION_ROLES, loadDecisionStates } from '@/infrastructure/communication/DecisionApprovalService';
 
 export const metadata = { title: 'Contracts • Procurement' };
 export const dynamic = 'force-dynamic';
 
 export default async function ContractsPage() {
-  await requireRoles([Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF]);
+  const ctx = await requireRoles([Role.ADMIN, Role.ADP_STAFF, Role.COORD_STAFF, Role.COMMUNICATION_STAFF]);
   const rows = await listContracts();
+  const decisions = await loadDecisionStates('CONTRACT', rows.map((r) => r.id));
+  const canDecide = DECISION_ROLES.some((x) => ctx.roles.includes(x));
   return (
     <>
       <div className="row" style={{ marginBottom: 16 }}>
@@ -51,7 +55,7 @@ export default async function ContractsPage() {
                   <td className="mono">{r.contractNumber}</td>
                   <td><Link href={`/indents/${r.indentId}`}>{r.indentSubject}</Link></td>
                   <td>{r.firmName}</td>
-                  <td><StatusPill tone={r.status === 'COMPLETED' || r.status === 'CLOSED' ? 'ok' : r.status === 'TERMINATED' ? 'danger' : 'info'}>{r.status}</StatusPill></td>
+                  <td><StatusPill tone={r.status === 'COMPLETED' || r.status === 'CLOSED' ? 'ok' : r.status === 'TERMINATED' ? 'danger' : 'info'}>{r.status}</StatusPill>{decisions.get(r.id)?.locked && <> <StatusPill tone="warn">🔒 Locked</StatusPill></>}</td>
                   <td className="right"><MoneyLabel amountMinor={r.valueMinor} currency={r.currency} /></td>
                   <td><DateLabel iso={r.awardedOn} /></td>
                   <td><DateLabel iso={r.signedOn} /></td>
@@ -59,6 +63,7 @@ export default async function ContractsPage() {
                   <td><DateLabel iso={r.closedOn} /></td>
                   <td className="right mono">{r.guaranteeCount} / {r.invoiceCount} / {r.paymentCount} / {r.lcCount}</td>
                   <td className="right" style={{ whiteSpace: 'nowrap' }}>
+                    {canDecide && <DecisionApprovalPanel compact subjectType="CONTRACT" subjectId={r.id} label={r.contractNumber} locked={!!decisions.get(r.id)?.locked} events={[]} canAct />}
                     {!r.takingOverCertifiedOn && (r.status === 'SIGNED' || r.status === 'IN_PROGRESS') && (
                       <>
                         <IssueTakingOverButton contractId={r.id} />

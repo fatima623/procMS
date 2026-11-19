@@ -1,0 +1,21 @@
+import { NextResponse, type NextRequest } from 'next/server';
+import { requireAuth } from '@/interfaces/http/middleware/authGuard';
+import { toHttpResponse } from '@/interfaces/http/errors';
+import { REQUEST_ID_HEADER, requestIdOf } from '@/interfaces/http/requestId';
+import { mailBoxService } from '@/infrastructure/mail-box/MailBoxService';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+/** POST /api/messages/[id]/mark-read — recipient only. */
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const requestId = requestIdOf(req);
+  try {
+    const { id } = await params;
+    const ctx = await requireAuth(req);
+    await mailBoxService.markRead(ctx, id);
+    return NextResponse.json({ data: { id } }, { headers: { [REQUEST_ID_HEADER]: requestId } });
+  } catch (err) {
+    return toHttpResponse(err, requestId);
+  }
+}

@@ -3,6 +3,7 @@ import { DiscrepancyStatus } from '@prisma/client';
 import { prisma } from '@/infrastructure/db/prisma';
 import { decimalToMinor } from '@/infrastructure/common/decimal';
 import { NotFoundError, ValidationError } from '@/domain/errors/DomainError';
+import { assertContractNotLocked } from '@/infrastructure/communication/DecisionApprovalService';
 import type {
   ExtendDPInput,
   AssessLDInput,
@@ -25,6 +26,7 @@ export const executionObligations = {
       select: { id: true, originalDP: true, dpExtensions: { orderBy: { grantedOn: 'desc' }, take: 1, select: { newDP: true } } },
     });
     if (!contract) throw new NotFoundError('Contract', input.contractId);
+    await assertContractNotLocked(input.contractId);
     const previousDP = contract.dpExtensions[0]?.newDP ?? contract.originalDP ?? null;
     if (previousDP && input.newDP.getTime() <= previousDP.getTime()) {
       throw new ValidationError('New DP must be after the current DP');
@@ -161,6 +163,7 @@ export const executionObligations = {
       throw new ValidationError('Taking-Over Certificate already issued for this contract');
     }
     await this.assertNoOpenDiscrepancies(contractId);
+    await assertContractNotLocked(contractId);
     await prisma.contract.update({
       where: { id: contractId },
       data: {
@@ -199,6 +202,7 @@ export const executionObligations = {
         'Issue the Taking-Over Certificate first.',
       );
     }
+    await assertContractNotLocked(contractId);
     await prisma.contract.update({
       where: { id: contractId },
       data: { status: 'CLOSED', closedOn },

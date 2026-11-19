@@ -61,6 +61,10 @@ enum Role {
   CPO
   INSPECTORATE
   FIRM_REP
+  CENTRAL_REGISTRY // v4.4.1 §4.5 — files mail inward/outward, minutes, postal stamps
+  AUDIT_STAFF // v4.4.1 §4.29–§4.30 — audit objections, items, draft paras
+  LEGAL_STAFF // v4.4.1 §4.31 — court cases + proceeding history
+  COMMUNICATION_STAFF // v4.4.1 §4.42 — Decision Approval lock / Un-Approve
 }
 
 enum SectionKind {
@@ -324,6 +328,7 @@ model Indent {
 
   createdAt DateTime @default(now()) @db.DateTime(6)
   updatedAt DateTime @updatedAt @db.DateTime(6)
+  decisionApprovalLocked Boolean @default(false) // Z8 Decision Approval (Q6) — separate from CLOSED
   version   Int      @default(0)
 
   indenter    User                        @relation("IndenterToIndent", fields: [indenterId], references: [id])
@@ -506,6 +511,8 @@ model ITPerforma {
   commercialOffers CommercialOffer[]
   tsr              TechnicalScrutinyReport?
   cst              CST?
+  ppraInvoiceLinks PPRAInvoiceITLink[]
+  dgprnAcknowledgements DGPRNAcknowledgement[]
 
   @@index([status])
 }
@@ -868,6 +875,7 @@ model Contract {
   status                ExecutionContractStatus @default(SIGNED)
   takingOverCertifiedOn DateTime?               @db.Date // taking-over certificate issued
   closedOn              DateTime?               @db.Date // contract formally closed
+  decisionApprovalLocked Boolean @default(false) // Z8 Decision Approval (Q6) — separate from CLOSED
   version               Int                     @default(0)
   createdAt             DateTime                @default(now()) @db.DateTime(6)
   updatedAt             DateTime                @updatedAt @db.DateTime(6)
@@ -1853,4 +1861,325 @@ model Discrepancy {
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
   @@index([inspectionId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Central Registry (v4.4.1 manual pp.41–47; migration plan §4.5–§4.7)
+// ---------------------------------------------------------------------------
+
+enum CorrespondenceDirection {
+  INWARD
+  OUTWARD
+}
+
+/// IMF = Internal Minute File, EMF = External Minute File (OPEN_QUESTIONS Q5).
+enum MinuteKind {
+  IMF
+  EMF
+}
+
+/// One piece of official mail received by, or sent from, DP(N).
+model OfficialCorrespondence {
+  id               String                  @id @db.VarChar(26)
+  direction        CorrespondenceDirection
+  controlNumber    String                  @unique @db.VarChar(40) // e.g. CR/IN/2026/00001
+  subject          String                  @db.VarChar(500)
+  fromParty        String                  @db.VarChar(200)
+  toParty          String                  @db.VarChar(200)
+  receivedOrSentOn DateTime                @db.Date
+  assignedToUserId String?                 @db.VarChar(26)
+  remarks          String?                 @db.Text
+  documentKey      String?                 @db.VarChar(500)
+  createdByUserId  String                  @db.VarChar(26)
+  createdAt        DateTime                @default(now()) @db.DateTime(6)
+  updatedAt        DateTime                @updatedAt @db.DateTime(6)
+  version          Int                     @default(0)
+
+  minutes       CorrespondenceMinute[]
+  postalStamps  PostalStamp[]
+
+  @@index([direction, receivedOrSentOn])
+  @@index([assignedToUserId])
+}
+
+/// A minute (note) written on a correspondence record.
+model CorrespondenceMinute {
+  id               String                 @id @db.VarChar(26)
+  correspondenceId String                 @db.VarChar(26)
+  kind             MinuteKind
+  text             String                 @db.Text
+  authorUserId     String                 @db.VarChar(26)
+  createdAt        DateTime               @default(now()) @db.DateTime(6)
+
+  correspondence OfficialCorrespondence @relation(fields: [correspondenceId], references: [id], onDelete: Cascade)
+
+  @@index([correspondenceId, createdAt])
+}
+
+/// Postal stamp register (DAK accounting). Optionally tied to an outgoing letter.
+/// Kept per OPEN_QUESTIONS Q10 — drop if DAK has gone fully electronic.
+model PostalStamp {
+  id               String                  @id @db.VarChar(26)
+  correspondenceId String?                 @db.VarChar(26)
+  denomination     Decimal                 @db.Decimal(10, 2) // face value of ONE stamp, PKR
+  quantity         Int
+  usedOn           DateTime                @db.Date
+  enteredByUserId  String                  @db.VarChar(26)
+  createdAt        DateTime                @default(now()) @db.DateTime(6)
+
+  correspondence OfficialCorrespondence? @relation(fields: [correspondenceId], references: [id], onDelete: SetNull)
+
+  @@index([usedOn])
+  @@index([correspondenceId])
+}
+
+/// Internal user-to-user mail (v4.4.1 manual pp.13–18; migration plan §4.4).
+model Message {
+  id              String    @id @db.VarChar(26)
+  fromUserId      String    @db.VarChar(26)
+  toUserId        String    @db.VarChar(26)
+  subject         String    @db.VarChar(200)
+  body            String    @db.Text
+  sentAt          DateTime  @default(now()) @db.DateTime(6)
+  readAt          DateTime? @db.DateTime(6)
+  parentMessageId String?   @db.VarChar(26)
+
+  parent  Message?  @relation("MessageReplies", fields: [parentMessageId], references: [id], onDelete: SetNull)
+  replies Message[] @relation("MessageReplies")
+
+  @@index([toUserId, readAt])
+  @@index([fromUserId, sentAt])
+  @@index([parentMessageId])
+}
+
+// PPRA Invoices (v4.4.1 manual pp.166–174; migration plan §4.27)
+enum PPRAInvoiceStatus {
+  RECEIVED
+  RETURNED
+  SENT_TO_DGPRN
+  PAID
+}
+
+/// Invoice from PPRA to DP(N) (tender upload fees etc.). A RETURNED invoice is final;
+/// PPRA's corrected invoice is filed as a new row with its own number.
+model PPRAInvoice {
+  id              String            @id @db.VarChar(26)
+  invoiceNumber   String            @unique @db.VarChar(60)
+  receivedOn      DateTime          @db.Date
+  amount          Decimal           @db.Decimal(20, 4)
+  currency        String            @default("PKR") @db.VarChar(3)
+  status          PPRAInvoiceStatus @default(RECEIVED)
+  returnedReason  String?           @db.Text
+  returnedOn      DateTime?         @db.Date
+  sentToDGPRNOn   DateTime?         @db.Date
+  paidOn          DateTime?         @db.Date
+  documentKey     String?           @db.VarChar(500)
+  createdByUserId String            @db.VarChar(26)
+  createdAt       DateTime          @default(now()) @db.DateTime(6)
+  updatedAt       DateTime          @updatedAt @db.DateTime(6)
+  version         Int               @default(0)
+
+  itLinks PPRAInvoiceITLink[]
+  dgprnAcknowledgements DGPRNAcknowledgement[]
+
+  @@index([status, receivedOn])
+}
+
+/// Which IT Proformas (tenders) an invoice covers. ppraUploadId comes later with Fahad's F1.
+model PPRAInvoiceITLink {
+  id            String @id @db.VarChar(26)
+  ppraInvoiceId String @db.VarChar(26)
+  itPerformaId  String @db.VarChar(26)
+
+  invoice    PPRAInvoice @relation(fields: [ppraInvoiceId], references: [id], onDelete: Cascade)
+  itPerforma ITPerforma  @relation(fields: [itPerformaId], references: [id])
+
+  @@unique([ppraInvoiceId, itPerformaId])
+  @@index([itPerformaId])
+}
+
+// DGPR(N) Acknowledgement (v4.4.1 manual pp.175–180; migration plan §4.28)
+/// DGPR(N)'s acknowledgement of a forwarded PPRA invoice and/or an IT publication.
+/// At least one of invoiceId / itPerformaId is set (enforced in the service).
+model DGPRNAcknowledgement {
+  id              String    @id @db.VarChar(26)
+  invoiceId       String?   @db.VarChar(26)
+  itPerformaId    String?   @db.VarChar(26)
+  receivedOn      DateTime  @db.Date
+  referenceNumber String    @db.VarChar(80)
+  remarks         String?   @db.Text
+  createdByUserId String    @db.VarChar(26)
+  createdAt       DateTime  @default(now()) @db.DateTime(6)
+
+  invoice    PPRAInvoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  itPerforma ITPerforma?  @relation(fields: [itPerformaId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@index([itPerformaId])
+}
+
+// Audit Section (v4.4.1 manual pp.181–193; migration plan §4.29–§4.30; Q11)
+enum AuditRecordStatus {
+  OPEN
+  CLOSED
+  SETTLED
+}
+
+enum AuditObjectionStatus {
+  OPEN
+  REPLIED
+  SETTLED
+}
+
+enum AuditItemStatus {
+  AWAITED
+  REPLY
+  CLEARED
+}
+
+model AuditRecord {
+  id                String            @id @db.VarChar(26)
+  auditSection      String            @db.VarChar(120)
+  fiscalYearId      String            @db.VarChar(26) // FiscalYear.id, checked in the service
+  status            AuditRecordStatus @default(OPEN)
+  subjectIndentId   String?           @db.VarChar(26)
+  subjectContractId String?           @db.VarChar(26)
+  raisedOn          DateTime          @db.Date
+  documentKey       String?           @db.VarChar(500)
+  createdByUserId   String            @db.VarChar(26)
+  createdAt         DateTime          @default(now()) @db.DateTime(6)
+  updatedAt         DateTime          @updatedAt @db.DateTime(6)
+  version           Int               @default(0)
+
+  objections AuditObjection[]
+  items      AuditItem[]
+
+  @@index([status, raisedOn])
+  @@index([fiscalYearId])
+}
+
+model AuditObjection {
+  id                  String               @id @db.VarChar(26)
+  auditRecordId       String               @db.VarChar(26)
+  ground              String               @db.Text
+  para                String               @db.VarChar(40)
+  amountInvolvedMinor BigInt? // 10^-4 units, like domain/shared/Money
+  currency            String?              @db.VarChar(3)
+  status              AuditObjectionStatus @default(OPEN)
+  replyText           String?              @db.Text
+  repliedOn           DateTime?            @db.Date
+  repliedByUserId     String?              @db.VarChar(26)
+  createdAt           DateTime             @default(now()) @db.DateTime(6)
+
+  auditRecord AuditRecord              @relation(fields: [auditRecordId], references: [id], onDelete: Cascade)
+  itemLinks   AuditItemObjectionLink[]
+
+  @@index([auditRecordId])
+}
+
+model AuditItem {
+  id            String          @id @db.VarChar(26)
+  auditRecordId String          @db.VarChar(26)
+  itemText      String          @db.Text
+  status        AuditItemStatus @default(AWAITED)
+  replyText     String?         @db.Text
+  createdAt     DateTime        @default(now()) @db.DateTime(6)
+
+  auditRecord    AuditRecord              @relation(fields: [auditRecordId], references: [id], onDelete: Cascade)
+  draftParas     AuditDraftPara[]
+  objectionLinks AuditItemObjectionLink[]
+
+  @@index([auditRecordId])
+}
+
+model AuditDraftPara {
+  id              String   @id @db.VarChar(26)
+  auditItemId     String   @db.VarChar(26)
+  paraText        String   @db.Text
+  submittedOn     DateTime @db.Date
+  createdByUserId String   @db.VarChar(26)
+  createdAt       DateTime @default(now()) @db.DateTime(6)
+
+  auditItem AuditItem @relation(fields: [auditItemId], references: [id], onDelete: Cascade)
+
+  @@index([auditItemId])
+}
+
+model AuditItemObjectionLink {
+  id               String @id @db.VarChar(26)
+  auditItemId      String @db.VarChar(26)
+  auditObjectionId String @db.VarChar(26)
+
+  auditItem      AuditItem      @relation(fields: [auditItemId], references: [id], onDelete: Cascade)
+  auditObjection AuditObjection @relation(fields: [auditObjectionId], references: [id], onDelete: Cascade)
+
+  @@unique([auditItemId, auditObjectionId])
+  @@index([auditObjectionId])
+}
+
+// Legal Section — Court Cases (v4.4.1 manual pp.194–200; migration plan §4.31; Q11)
+enum CourtCaseStatus {
+  PENDING
+  CLOSED
+  DISPOSED_OFF
+}
+
+model CourtCase {
+  id                String          @id @db.VarChar(26)
+  caseNumber        String          @unique @db.VarChar(80)
+  court             String          @db.VarChar(200)
+  party             String          @db.VarChar(200)
+  counterParty      String          @db.VarChar(200)
+  status            CourtCaseStatus @default(PENDING)
+  relatedIndentId   String?         @db.VarChar(26) // Indent.id, checked in the service
+  relatedContractId String?         @db.VarChar(26) // Contract.id, checked in the service
+  filedOn           DateTime        @db.Date
+  documentKey       String?         @db.VarChar(500)
+  createdByUserId   String          @db.VarChar(26)
+  createdAt         DateTime        @default(now()) @db.DateTime(6)
+  updatedAt         DateTime        @updatedAt @db.DateTime(6)
+  version           Int             @default(0)
+
+  proceedings CourtProceeding[]
+
+  @@index([status, filedOn])
+}
+
+model CourtProceeding {
+  id              String    @id @db.VarChar(26)
+  courtCaseId     String    @db.VarChar(26)
+  hearingDate     DateTime  @db.Date
+  outcome         String    @db.VarChar(500)
+  nextHearingDate DateTime? @db.Date
+  notes           String?   @db.Text
+  documentKey     String?   @db.VarChar(500)
+  createdByUserId String    @db.VarChar(26)
+  createdAt       DateTime  @default(now()) @db.DateTime(6)
+
+  courtCase CourtCase @relation(fields: [courtCaseId], references: [id], onDelete: Cascade)
+
+  @@index([courtCaseId, hearingDate])
+}
+
+// Decision Approval — Communication Section lock (v4.4.1 manual pp.253–256; §4.42; Q6)
+enum DecisionSubjectType {
+  INDENT
+  CONTRACT
+}
+
+enum DecisionAction {
+  APPROVE
+  UN_APPROVE
+}
+
+model DecisionApprovalEvent {
+  id              String              @id @db.VarChar(26)
+  subjectType     DecisionSubjectType
+  subjectId       String              @db.VarChar(26)
+  action          DecisionAction
+  decidedByUserId String              @db.VarChar(26)
+  decidedOn       DateTime            @default(now()) @db.DateTime(6)
+  remarks         String?             @db.Text
+
+  @@index([subjectType, subjectId, decidedOn])
 }

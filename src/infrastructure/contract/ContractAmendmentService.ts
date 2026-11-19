@@ -2,6 +2,7 @@ import { ulid } from 'ulid';
 import { ContractAmendmentStatus } from '@prisma/client';
 import { prisma } from '@/infrastructure/db/prisma';
 import { NotFoundError, ValidationError } from '@/domain/errors/DomainError';
+import { assertContractNotLocked } from '@/infrastructure/communication/DecisionApprovalService';
 import type {
   ProposeContractAmendmentInput,
   ApproveContractAmendmentInput,
@@ -61,6 +62,7 @@ export const contractAmendmentService = {
       // Only VALUE and QTY amendments move the contract value; QTY needs
       // deltaValue populated by the proposer. SPEC / DP / OTHER are informational.
       if ((row.scope === 'VALUE' || row.scope === 'QTY') && row.deltaValue) {
+        await assertContractNotLocked(row.contractId, tx);
         await tx.contract.update({
           where: { id: row.contractId },
           data: { value: { increment: row.deltaValue } },
