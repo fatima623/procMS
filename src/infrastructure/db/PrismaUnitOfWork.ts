@@ -11,6 +11,7 @@ import { PrismaCommercialOfferRepository } from '../repositories/PrismaCommercia
 import { PrismaCSTRepository } from '../repositories/PrismaCSTRepository';
 import { PrismaPurchaseRequisitionRepository } from '../repositories/PrismaPurchaseRequisitionRepository';
 import { PrismaAuditLogWriter } from '../repositories/PrismaAuditLogWriter';
+import { PrismaPrePPRepository } from '../repositories/PrismaPrePPRepository';
 
 /**
  * Wraps a Prisma $transaction and hands repositories that bind to the TX
@@ -32,6 +33,7 @@ export class PrismaUnitOfWork implements UnitOfWork {
           csts: new PrismaCSTRepository(tx),
           prs: new PrismaPurchaseRequisitionRepository(tx),
           audit: new PrismaAuditLogWriter(tx),
+          prePPs: new PrismaPrePPRepository(tx),
         };
         return work(handles);
       },

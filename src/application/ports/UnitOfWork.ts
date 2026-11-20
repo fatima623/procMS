@@ -7,6 +7,7 @@ import type { CommercialOfferRepository } from './CommercialOfferRepository';
 import type { CSTRepository } from './CSTRepository';
 import type { PurchaseRequisitionRepository } from './PurchaseRequisitionRepository';
 import type { AuditLogWriter } from './AuditLogWriter';
+import type { PrePPRepository } from './PrePPRepository';
 
 /**
  * Transactional context handed to a use-case. All repository calls executed
@@ -24,6 +25,7 @@ export interface UnitOfWorkHandles {
   readonly csts: CSTRepository;
   readonly prs: PurchaseRequisitionRepository;
   readonly audit: AuditLogWriter;
+  readonly prePPs: PrePPRepository;
 }
 
 export interface UnitOfWork {
