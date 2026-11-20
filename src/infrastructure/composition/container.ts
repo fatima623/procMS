@@ -4,6 +4,8 @@ import { PrismaIndentRepository } from '../repositories/PrismaIndentRepository';
 import { UlidFactory } from '../common/UlidFactory';
 import { SystemClock } from '../common/SystemClock';
 import { rootLogger } from '../logging/pinoLogger';
+import { StartPrePPApprovalUseCase } from '@/application/prepp/StartPrePPApprovalUseCase';
+
 
 import { CreateIndentUseCase } from '@/application/indent/CreateIndentUseCase';
 import { SubmitIndentUseCase } from '@/application/indent/SubmitIndentUseCase';
@@ -50,6 +52,7 @@ export interface Container {
   readonly createIndent: CreateIndentUseCase;
   readonly submitIndent: SubmitIndentUseCase;
   readonly forwardToBudget: ForwardToBudgetUseCase;
+  readonly startPrePPApproval: StartPrePPApprovalUseCase;
   readonly verifyBudget: VerifyBudgetUseCase;
   readonly rejectBudget: RejectBudgetUseCase;
   readonly assignToADP: AssignToADPUseCase;
@@ -137,6 +140,7 @@ export function getContainer(): Container {
     sendPR: new SendPRUseCase({ uow, clock, logger }),
     acknowledgePR: new AcknowledgePRUseCase({ uow, logger }),
     closePR: new ClosePRUseCase({ uow, logger }),
+    startPrePPApproval: new StartPrePPApprovalUseCase({ uow, ids, clock, logger }),
 
     raiseObservation: new RaiseObservationUseCase({ uow, clock, logger }),
     resolveObservations: new ResolveObservationsUseCase({ uow, clock, logger }),
