@@ -2,6 +2,7 @@ export const ApprovalSubject = {
   INDENT: 'INDENT',
   IT_PROFORMA: 'IT_PROFORMA',
   CST: 'CST',
+  PRE_PP: 'PRE_PP',
 } as const;
 export type ApprovalSubject = (typeof ApprovalSubject)[keyof typeof ApprovalSubject];
 
@@ -39,6 +40,7 @@ export const CHAIN_TEMPLATES: Readonly<Record<ApprovalSubject, readonly Approval
   INDENT: [ApprovalRole.AD, ApprovalRole.DD, ApprovalRole.DP_N, ApprovalRole.DGDP, ApprovalRole.SECY_DP],
   IT_PROFORMA: [ApprovalRole.AD, ApprovalRole.DD, ApprovalRole.DP_N],
   CST: [ApprovalRole.AD, ApprovalRole.DD],
+  PRE_PP: [ApprovalRole.AD, ApprovalRole.DD, ApprovalRole.DP_N, ApprovalRole.DGDP, ApprovalRole.SECY_DP],
 };
 
 /** Single-quote CST escalates to the full senior chain. */

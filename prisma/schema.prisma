@@ -293,6 +293,7 @@ enum IndentStatus {
   COMMERCIAL_OPEN // Commercial offers being opened
   CST_PREPARATION
   CST_APPROVAL // Chain #3 running
+  PRE_PP_APPROVAL // single-offer / propriety: Pre-Purchase Proposal chain running
   PR_ISSUED
   CLOSED
   CANCELLED
@@ -397,6 +398,7 @@ enum ApprovalSubject {
   INDENT
   IT_PROFORMA
   CST
+  PRE_PP
 }
 
 enum ApprovalChainStatus {
