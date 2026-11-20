@@ -1996,3 +1996,35 @@ model BudgetCard {
 
   @@index([fiscalYearId, budgetHeadId])
 }
+
+// -----------------------------------------------------------------------------
+// Pre-Purchase Proposal (v4.4.1 migration, module M3)
+// -----------------------------------------------------------------------------
+
+enum PrePPKind {
+  SINGLE_OFFER
+  PROPRIETARY
+  OTHER
+}
+
+enum PrePPStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PrePurchaseProposal {
+  id                  String      @id @db.VarChar(26)
+  indentId            String      @unique @db.VarChar(26)
+  kind                PrePPKind
+  justification       String      @db.Text
+  recommendedByUserId String      @db.VarChar(26)
+  recommendedOn       DateTime    @default(now()) @db.DateTime(6)
+  status              PrePPStatus @default(DRAFT)
+  approvalChainId     String?     @db.VarChar(26)
+  rejectionReason     String?     @db.Text
+  createdAt           DateTime    @default(now()) @db.DateTime(6)
+  updatedAt           DateTime    @updatedAt @db.DateTime(6)
+  version             Int         @default(0)
+}
