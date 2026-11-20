@@ -108,6 +108,12 @@ export class IssuePRUseCase {
           `Indent must be CST_APPROVAL or PRE_PP_APPROVAL to issue PR (currently ${indent.status})`,
         );
       }
+            if (indent.status === IndentStatus.PRE_PP_APPROVAL) {
+        const proposal = await h.prePPs.findByIndentId(indent.id);
+        if (!proposal || proposal.status !== 'APPROVED') {
+          throw new BusinessRuleViolationError('Pre-Purchase Proposal must be APPROVED before the PR is issued');
+        }
+      }
 
       const now = this.deps.clock.now();
       const pr = PurchaseRequisition.create(

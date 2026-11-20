@@ -165,6 +165,17 @@ export async function cascadeChainOutcome(
       return;
     }
 
+        case ApprovalSubject.PRE_PP: {
+      const proposal = await h.prePPs.findById(subjectId);
+      if (!proposal) throw new NotFoundError('PrePurchaseProposal', subjectId);
+      if (finalStatus === ApprovalChainStatus.APPROVED) {
+        await h.prePPs.setDecision(proposal.id, 'APPROVED');
+      } else if (finalStatus === ApprovalChainStatus.REJECTED) {
+        await h.prePPs.setDecision(proposal.id, 'REJECTED', 'Rejected by Pre-PP approval chain');
+      }
+      // The indent stays in PRE_PP_APPROVAL. Issuing the PR is still a human step.
+      return;
+    }
     default:
       // Exhaustiveness guard
       throw new Error(`Unhandled approval subject: ${subject as string}`);
