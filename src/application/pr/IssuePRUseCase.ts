@@ -103,9 +103,9 @@ export class IssuePRUseCase {
       if (!it) throw new NotFoundError('ITPerforma', cst.itPerformaId);
       const indent = await h.indents.findById(it.indentId);
       if (!indent) throw new NotFoundError('Indent', it.indentId);
-      if (indent.status !== IndentStatus.CST_APPROVAL) {
+            if (indent.status !== IndentStatus.CST_APPROVAL && indent.status !== IndentStatus.PRE_PP_APPROVAL) {
         throw new BusinessRuleViolationError(
-          `Indent must be CST_APPROVAL to issue PR (currently ${indent.status})`,
+          `Indent must be CST_APPROVAL or PRE_PP_APPROVAL to issue PR (currently ${indent.status})`,
         );
       }
 

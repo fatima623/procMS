@@ -298,7 +298,16 @@ export class Indent extends AggregateRoot<string> {
     this.transition(IndentStatus.CST_PREPARATION, IndentStatus.CST_APPROVAL, 'section.enterCSTApproval', actorUserId);
   }
 
+    /** Single-offer / propriety indents get a Pre-Purchase Proposal step after CST approval. */
+  public enterPrePPApproval(actorUserId: string): void {
+    this.transition(IndentStatus.CST_APPROVAL, IndentStatus.PRE_PP_APPROVAL, 'section.enterPrePPApproval', actorUserId);
+  }
+
   public markPRIssued(actorUserId: string): void {
+    if (this._status === IndentStatus.PRE_PP_APPROVAL) {
+      this.transition(IndentStatus.PRE_PP_APPROVAL, IndentStatus.PR_ISSUED, 'section.issuePR', actorUserId);
+      return;
+    }
     this.transition(IndentStatus.CST_APPROVAL, IndentStatus.PR_ISSUED, 'section.issuePR', actorUserId);
   }
 
