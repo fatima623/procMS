@@ -1,113 +1,74 @@
-'use client';
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { Role } from '@prisma/client';
+import { requireSessionCtx } from '@/interfaces/ui/auth';
+import { prisma } from '@/infrastructure/db/prisma';
+import { DateLabel } from '@/interfaces/ui/components/DateLabel';
+import { PrePPForm } from './PrePPForm';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Pre-Purchase Proposal' };
 
-export default function CreatePrePPPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    justification: '',
-    estimatedCost: '',
-    remarks: '',
+export default async function PrePPPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const ctx = await requireSessionCtx();
+
+  const indent = await prisma.indent.findUnique({
+    where: { id },
+    select: { id: true, indentNumber: true, subject: true, status: true, type: true },
   });
+  if (!indent) notFound();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+  const proposal = await prisma.prePurchaseProposal.findUnique({ where: { indentId: id } });
+  const it = await prisma.iTPerforma.findUnique({ where: { indentId: id }, select: { id: true } });
+  const cst = it
+    ? await prisma.cST.findFirst({ where: { itPerformaId: it.id }, select: { singleQuote: true, status: true } })
+    : null;
 
-    try {
-      const res = await fetch(`/api/indents/${params.id}/pre-pp/start-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          estimatedCost: parseFloat(form.estimatedCost),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to start Pre-PP approval');
-      }
-
-      // Redirect back to the indent details page on success
-      router.push(`/indents/${params.id}`);
-      router.refresh();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const canAct = [Role.ADP_STAFF, Role.COORD_STAFF, Role.ADMIN].some((r) => ctx.roles.includes(r));
+  const eligible = cst?.singleQuote === true || String(indent.type) === 'PROPRIETY';
 
   return (
-    <div className="max-w-2xl mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold mb-6 text-gray-900">Create Pre-Purchase Proposal (Pre-PP)</h1>
-      
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-          {error}
-        </div>
+    <>
+      <div className="row" style={{ marginBottom: 16 }}>
+        <Link className="btn" href={`/indents/${id}`}>← Back to indent</Link>
+      </div>
+      <h1 style={{ marginBottom: 4 }}>Pre-Purchase Proposal</h1>
+      <p className="muted mono" style={{ marginTop: 0 }}>{indent.indentNumber} — {indent.subject}</p>
+
+      <section className="card" style={{ padding: 16, marginBottom: 16 }}>
+        <dl style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: 8, columnGap: 10, margin: 0 }}>
+          <dt className="dim">Indent status</dt><dd>{String(indent.status).replace(/_/g, ' ')}</dd>
+          <dt className="dim">Indent type</dt><dd>{String(indent.type)}</dd>
+          <dt className="dim">Single-quote CST</dt><dd>{cst ? (cst.singleQuote ? 'Yes' : 'No') : '—'}</dd>
+          <dt className="dim">CST status</dt><dd>{cst ? String(cst.status) : '—'}</dd>
+          <dt className="dim">Needs a Pre-PP</dt><dd>{eligible ? 'Yes' : 'No (normal indent)'}</dd>
+        </dl>
+      </section>
+
+      {proposal && (
+        <section className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <h3 style={{ marginTop: 0 }}>Proposal</h3>
+          <dl style={{ display: 'grid', gridTemplateColumns: '200px 1fr', rowGap: 8, columnGap: 10, margin: 0 }}>
+            <dt className="dim">Kind</dt><dd>{String(proposal.kind).replace(/_/g, ' ')}</dd>
+            <dt className="dim">Status</dt><dd>{String(proposal.status)}</dd>
+            <dt className="dim">Recommended on</dt><dd><DateLabel iso={proposal.recommendedOn.toISOString()} /></dd>
+            <dt className="dim">Justification</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{proposal.justification}</dd>
+            {proposal.rejectionReason && (<><dt className="dim">Rejection reason</dt><dd>{proposal.rejectionReason}</dd></>)}
+            {proposal.approvalChainId && (
+              <><dt className="dim">Approval chain</dt><dd><Link href={`/approvals/${proposal.approvalChainId}`}>Open approval chain →</Link></dd></>
+            )}
+          </dl>
+        </section>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Justification</label>
-          <textarea
-            required
-            rows={4}
-            value={form.justification}
-            onChange={(e) => setForm({ ...form, justification: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            placeholder="Enter justification for single-quote/propriety Pre-PP..."
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Cost (PKR)</label>
-          <input
-            type="number"
-            required
-            step="0.01"
-            value={form.estimatedCost}
-            onChange={(e) => setForm({ ...form, estimatedCost: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            placeholder="0.00"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Remarks</label>
-          <input
-            type="text"
-            value={form.remarks}
-            onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-            className="w-full rounded-lg border border-gray-300 p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            placeholder="Optional remarks..."
-          />
-        </div>
-
-        <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Submitting...' : 'Start Pre-PP Approval'}
-          </button>
-        </div>
-      </form>
-    </div>
+      <PrePPForm
+        indentId={id}
+        hasProposal={!!proposal}
+        proposalStatus={proposal ? String(proposal.status) : null}
+        indentStatus={String(indent.status)}
+        canAct={canAct}
+      />
+    </>
   );
 }
